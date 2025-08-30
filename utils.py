@@ -32,7 +32,7 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
             continue
         
         beta = 1.0 / temps[i]  # inverse temperature
-        omega = freqs[i]       # oscillator frequency
+        omega = freqs[i]      # oscillator frequency
         
         # --- 1. Construct single oscillator thermal density matrix ---
         n = np.arange(localDim)
