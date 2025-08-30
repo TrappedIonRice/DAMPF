@@ -23,7 +23,7 @@ exchangepersite = 80.0
 
 # Oscillators per site
 freqspersite = [247]
-tempKelvin = 77.0
+tempKelvin = 0
 huangRhysFactors = [0]
 dampspersite = [0]
 # huangRhysFactors = [0.056]

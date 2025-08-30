@@ -6,8 +6,8 @@ from tqdm import tqdm
 import scipy.linalg
 
 
-# a = utils.annihilation_operator(config.localDim)
-# a_dag = a.conj().T
+a = utils.annihilation_operator(config.localDim)
+a_dag = a.conj().T
 
 
 class Totalsys_Rho:
@@ -33,45 +33,57 @@ class Totalsys_Rho:
         self.coups = coups
         self.energies = config.energies
         self.exchange = config.exchange
-        # self.a = a
-        # self.a_dag = a_dag
+        self.a = a
+        self.a_dag = a_dag
     
-    # def Test_Time_Evolve(self, timesteps, dt):
+    def Test_Time_Evolve(self, timesteps, dt):
         
-    #     rho = np.zeros((self.nsites, self.nsites), dtype=complex)
-    #     rho[0][0] = 1.0 + 0j
-        
-    #     for step in tqdm(range(timesteps)):
-            
-    #         new_rho = np.empty((self.nsites, self.nsites), dtype=complex)
-    #         for m in range(self.nsites):
-    #             for n in range(self.nsites):
-    #                 for k in range(self.nsites):
-    #                     for l in range(self.nsites):
-    #                         if (k == 0) and (l == 0):
-    #                             new_rho[m][n] = self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
-    #                         else:
-    #                             new_rho[m][n] += self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
-                                                                
-    #         rho = new_rho   
-                                                    
-    #         for i in range(self.nsites):
-    #             self.test_populations[i][step] = rho[i][i].real
-        
-    def Time_Evolve(self, timesteps, dt, max_bond_dim):
-        
-        # osc_gates = self.get_osc_gates(dt)
-        # int_gates = self.get_int_gates(dt)
-        el_coeffients = self.get_el_coeffients(dt)
-        
-        print()
-        print(el_coeffients)
-        print()
+        rho = np.zeros((self.nsites, self.nsites), dtype=complex)
+        rho[0][0] = 1.0 + 0j
         
         for step in tqdm(range(timesteps)):
             
-            # if step == 500:
-            #     print(self.rho[0][0])
+            # if step == 10:
+                
+            #     print()
+            #     for i in range(self.nsites):
+            #         for j in range(self.nsites):
+            #             print(rho[i][j])
+            #     exit()
+            
+            new_rho = np.empty((self.nsites, self.nsites), dtype=complex)
+            for m in range(self.nsites):
+                for n in range(self.nsites):
+                    for k in range(self.nsites):
+                        for l in range(self.nsites):
+                            if (k == 0) and (l == 0):
+                                new_rho[m][n] = self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
+                            else:
+                                new_rho[m][n] += self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
+                                                                
+            rho = new_rho   
+                                                    
+            for i in range(self.nsites):
+                self.test_populations[i][step] = rho[i][i].real
+        
+    def Time_Evolve(self, timesteps, dt, max_bond_dim):
+        
+        osc_gates = self.get_osc_gates(dt)
+        int_gates = self.get_int_gates(dt)
+        el_coeffients = self.get_el_coeffients(dt)
+        
+        # print()
+        # print(el_coeffients)
+        # print()
+        
+        for step in tqdm(range(timesteps)):
+            
+            # if step == 10:
+                
+            #     print()
+            #     for i in range(self.nsites):
+            #         for j in range(self.nsites):
+            #             print(self.rho[i][j][0].data)
             #     exit()
             
             new_rho = np.empty((self.nsites, self.nsites), dtype=object)
@@ -86,18 +98,18 @@ class Totalsys_Rho:
                                                                 
             self.rho = new_rho.copy()
                                                     
-            # for i in range(self.nsites):
-            #     for j in range(self.nsites):
-            #         if i <= j:
-            #             self.rho[i][j] = self.rho[i][j].gate_with_mpo(int_gates[i][j])
-            #             self.rho[i][j] = self.rho[i][j].gate_with_mpo(osc_gates)
-            #             pass
-            #         else:
-            #             self.rho[i][j] = self.rho[j][i].conj()
+            for i in range(self.nsites):
+                for j in range(self.nsites):
+                    if i <= j:
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(int_gates[i][j])
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(osc_gates)
+                        pass
+                    else:
+                        self.rho[i][j] = self.rho[j][i].conj()
                         
-            # for i in range(self.nsites):
-            #     for j in range(self.nsites):
-            #         self.rho[i][j].compress(max_bond=max_bond_dim)
+            for i in range(self.nsites):
+                for j in range(self.nsites):
+                    self.rho[i][j].compress(max_bond=max_bond_dim)
             
             self.update_populations(step)
             
@@ -106,30 +118,30 @@ class Totalsys_Rho:
         for n in range(self.nsites):
             self.populations[n][step] = utils.trace_MPS(self.rho[n][n], self.nosc, self.nsites, self.localDim).real
             
-    # def get_osc_gates(self, dt):
+    def get_osc_gates(self, dt):
         
-    #     local_ops = []
-    #     for i in range(self.nosc):
-    #         local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + 2 * dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
+        local_ops = []
+        for i in range(self.nosc):
+            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + 2 * dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
             
-    #     return qtn.MPO_product_operator(local_ops)
+        return qtn.MPO_product_operator(local_ops)
     
-    # def get_int_gates(self, dt):
+    def get_int_gates(self, dt):
         
-    #     int_gates = np.empty((self.nsites, self.nsites), dtype=object)
-    #     for m in range(self.nsites):
-    #         for n in range(self.nsites):
+        int_gates = np.empty((self.nsites, self.nsites), dtype=object)
+        for m in range(self.nsites):
+            for n in range(self.nsites):
                 
-    #             # Construct the MPO for matrix element (m,n)
-    #             temporary_ops = []
-    #             for i in range(self.nosc):
-    #                 temporary_op = self.coups[m][i] * np.kron((self.a + self.a_dag),np.eye(self.localDim, dtype=complex)) - self.coups[n][i] * np.kron(np.eye(self.localDim, dtype=complex), (self.a + self.a_dag).T)
-    #                 temporary_ops.append(scipy.linalg.expm(-1j * dt * temporary_op))
+                # Construct the MPO for matrix element (m,n)
+                temporary_ops = []
+                for i in range(self.nosc):
+                    temporary_op = self.coups[m][i] * np.kron((self.a + self.a_dag),np.eye(self.localDim, dtype=complex)) - self.coups[n][i] * np.kron(np.eye(self.localDim, dtype=complex), (self.a + self.a_dag).T)
+                    temporary_ops.append(scipy.linalg.expm(-1j * dt * temporary_op))
                 
-    #             # Combine local operators into an MPO, with bond dimensions of 1
-    #             int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
+                # Combine local operators into an MPO, with bond dimensions of 1
+                int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
                 
-    #     return int_gates
+        return int_gates
     
     def get_el_coeffients(self, dt):
         
@@ -148,7 +160,7 @@ class Totalsys_Rho:
             for n in range(self.nsites):
                 for k in range(self.nsites):
                     for l in range(self.nsites):
-                        # if np.abs(U_el[m][k] * U_el_dag[l][n]) > cutoff:
-                        Coefficients[m][n][k][l] = U_el[m][k] * U_el_dag[l][n]
+                        if np.abs(U_el[m][k] * U_el_dag[l][n]) > cutoff:
+                            Coefficients[m][n][k][l] = U_el[m][k] * U_el_dag[l][n]
                             
         return Coefficients                       
