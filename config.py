@@ -1,72 +1,78 @@
+'''
+This is the configuration file for the DAMPF simulation.
+All of the tunable parameters are deliberately set here in a separate file.
+'''
+
+
 import numpy as np
 
-# --------------------
+
+# -----------------------------------------------
 # Basic system parameters
-# --------------------
+# -----------------------------------------------
 nsites = 2                 # number of sites
-noscpersite = 1            # number of oscillators per site
+noscpersite = 2            # number of oscillators per site
 nosc = noscpersite         # total number of oscillators
-localDim = 3              # local dimension of oscillators
-maxBondDim = 4             # maximal bond dimension of MPS
-timestep = 0.5            # integration time-step in fs
-time = 300               # total simulation time in fs
+localDim = 10              # local dimension of oscillators
+maxBondDim = 5             # maximal bond dimension of MPS
+timestep = 0.5             # integration time-step
+time = 10000               # total simulation time
 
-# --------------------
-# Parameters for system dynamics (cm^-1)
-# --------------------
-# Site energies (Ω_n)
+# -----------------------------------------------
+# Parameters for system dynamics
+# -----------------------------------------------
 
-energies = [12430., 12405.]
+# Site energies (E_n)
+energies = [0.5,-0.5]
 
-# Exchange coupling (per site)
-exchangepersite = 80.0
+# Exchange coupling (which is the off-diagonal part of the El_Hamiltonian)
+# We assume uniform coupling between all sites here for simplicity, but this can be readily changed into cases with different couplings among sites.
+exchange_per_site = 0.05
 
-# Oscillators per site
-freqspersite = [247]
-tempKelvin = 0
-huangRhysFactors = [0]
-dampspersite = [0]
-# huangRhysFactors = [0.056]
-# dampspersite = [53]
+# Parameters for oscillators
+freqs_per_site = [1,1.2]
+temp_K = 0
+coupling_strength = [[0.5,-0.5],[0.6,-0.6]]
+damping_rate_per_osc = [0.05,0.05]
 
-# ================================================
+# -----------------------------------------------
 # Conversion constants
-# ================================================
-_OmegaConv = 1.883651567e-4  # cm^-1 → fs^-1
+# -----------------------------------------------
+
+# We are currently using unitless units in the code, but the conversion factors will be used if unit conversion is involved.
+_OmegaConv = 1
 _Tconv = 0.6950348           # K → cm^-1
 
-# Convert energies
-energies = _OmegaConv * np.array(energies)
-
-# Exchange matrix (real & symmetric)
-exchange = np.array([
-    [0 if i == j else exchangepersite for i in range(nsites)]
+# -----------------------------------------------
+# Construct parameter arrays used in the simulation
+# -----------------------------------------------
+energies = _OmegaConv * np.array(energies)    # site energies
+exchange = _OmegaConv * np.array([
+    [0 if i == j else exchange_per_site for i in range(nsites)]
     for j in range(nsites)
-], dtype=float)
-exchange *= _OmegaConv
+], dtype=float)    # exchange matrix
+freqs = _OmegaConv * np.array(freqs_per_site)    # oscillator frequencies
+temps = np.full(nosc, _OmegaConv * _Tconv * temp_K)    # temperatures of oscillators
+coups = _OmegaConv * np.array(coupling_strength)    # coupling strengths between sites and oscillators
+damps = _OmegaConv * np.array(damping_rate_per_osc)    # damping rates of oscillators
 
-# Frequencies of all oscillators (flattened)
-freqs = _OmegaConv * np.array(freqspersite)
 
-# Temperatures of oscillators in fs^-1
-temps = np.full(nosc, _OmegaConv * _Tconv * tempKelvin)
-
-# Coupling constants: [site_index, coupling_value...]
-coups = []
-
-for site in range(nsites):
-    coup_values = [w * np.sqrt(s) for w, s in zip(freqs, huangRhysFactors)]
-    coups.append(coup_values)
-
-# Damping rates (flattened)
-damps = _OmegaConv * np.array(dampspersite)
-
+# -----------------------------------------------
+# Print out all parameters
+# -----------------------------------------------
 
 if __name__ == "__main__":
+    print("nsites =", nsites)
+    print("noscpersite =", noscpersite)
+    print("nosc =", nosc)
+    print("localDim =", localDim)
+    print("maxBondDim =", maxBondDim)
+    print("timestep =", timestep)
+    print("time =", time)
+    print()
     print("energies =", energies)
     print("exchange matrix:\n", exchange)
     print("freqs =", freqs)
     print("temps =", temps)
     print("coups =", coups)
     print("damps =", damps)
-

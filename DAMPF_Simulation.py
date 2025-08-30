@@ -1,19 +1,19 @@
+'''
+This is the main simulation script for the DAMPF method.
+'''
+
+
 import numpy as np
 import config
 from Totalsys_Class import Totalsys_Rho
 import matplotlib.pyplot as plt
-import time
 
 
-TOTAL_RHO = Totalsys_Rho(config.nsites, config.noscpersite, config.nosc, config.localDim, config.temps, config.freqs, config.damps, config.coups)
+TOTAL_RHO = Totalsys_Rho(config.nsites, config.noscpersite, config.nosc, config.localDim, config.temps, config.freqs, config.damps, config.coups)   # Initialize the total system density matrix in MPS form
 
-for i in range(config.nsites):
-    for j in range(config.nsites):
-        print(TOTAL_RHO.rho[i][j][0].data)
+TOTAL_RHO.Time_Evolve(timesteps=int(config.time/config.timestep), dt=config.timestep, max_bond_dim=config.maxBondDim)   # Time evolve the total system density matrix
 
-
-TOTAL_RHO.Time_Evolve(timesteps=int(config.time/config.timestep), dt=config.timestep, max_bond_dim=config.maxBondDim)
-
+# Plot the population dynamics after time evolution
 Time = np.arange(0, config.time, config.timestep)
 plt.plot(Time, TOTAL_RHO.populations.sum(axis=0), label='Total_trace')
 for i in range(config.nsites):
@@ -22,4 +22,6 @@ for i in range(config.nsites):
 plt.xlabel('Time')
 plt.ylabel('Population')
 plt.legend()
+plt.title('Population Dynamics')
+plt.grid('True')
 plt.show()

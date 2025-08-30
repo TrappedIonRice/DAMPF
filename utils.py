@@ -1,8 +1,13 @@
-import quimb as qu
+'''
+This module contains utility functions for convenience in the simulation.
+'''
+
+
 import quimb.tensor as qtn
 import numpy as np
 import config
 
+# Construct annihilation and creation operators for a single harmonic oscillator
 def annihilation_operator(N, dtype=complex):
     
     a = np.zeros((N, N), dtype=dtype)
@@ -24,6 +29,7 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
     
     for i in range(nosc):
         
+        # Avoid division by zero for zero temperature
         if temps[i] == 0:
             rho = np.zeros((localDim, localDim))
             rho[0, 0] = 1.0
@@ -32,14 +38,14 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
             continue
         
         beta = 1.0 / temps[i]  # inverse temperature
-        omega = freqs[i]      # oscillator frequency
+        omega = freqs[i]       # oscillator frequency
         
         # --- 1. Construct single oscillator thermal density matrix ---
         n = np.arange(localDim)
         energies = omega * (n + 0.5)               # energy levels
         boltzmann = np.exp(-beta * energies)       # Boltzmann factors  
-        Z = np.sum(boltzmann)                     # partition function
-        rho = np.diag(boltzmann / Z)              # thermal density matrix
+        Z = np.sum(boltzmann)                      # partition function
+        rho = np.diag(boltzmann / Z)               # thermal density matrix
         
         # --- 2. Flatten the density matrix into a vector ---
         rho_vec = rho.flatten()
@@ -54,38 +60,42 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
  
     return thermal_mps
 
-def trace_MPS(mps, nsites, localDim):
+# def trace_MPS(mps, nsites, localDim):
     
-    trace_vec = np.zeros(localDim**2, dtype=complex)
-    trace_vec[::localDim+1] = 1  # set diagonal elements to 1
+#     trace_vec = np.zeros(localDim**2, dtype=complex)
+#     trace_vec[::localDim+1] = 1  # set diagonal elements to 1
 
-    trace_tensors = []
-    for i in range(nsites):
-        phys_ind = mps.site_ind(i)
-        tr_t = qtn.Tensor(trace_vec, inds=(phys_ind,))
-        trace_tensors.append(tr_t)
+#     trace_tensors = []
+#     for i in range(nsites):
+#         phys_ind = mps.site_ind(i)
+#         tr_t = qtn.Tensor(trace_vec, inds=(phys_ind,))
+#         trace_tensors.append(tr_t)
 
-    all_tensors = list(mps.tensors) + trace_tensors
+#     all_tensors = list(mps.tensors) + trace_tensors
 
-    res = qtn.tensor_contract(*all_tensors, optimize='auto-hq')
+#     res = qtn.tensor_contract(*all_tensors, optimize='auto-hq')
     
-    return complex(res)
+#     return complex(res)
 
+# The trace of an MPS (sitewisely flattened MPO) cannot be calculated directly using the built-in function in quimb, so we define our own function here.
+# We are calculating the trace by contracting the MPS with a series of identical vectors that pick out the diagonal elements.
 def trace_MPS(mps, nosc, nsites, localDim):
     
     trace_vec = np.zeros(localDim**2, dtype=complex)
-    trace_vec[::localDim+1] = 1  # set diagonal elements to 1
+    trace_vec[::localDim+1] = 1    # set diagonal elements to 1
     trace_vectors = [trace_vec for _ in range(nosc)]
     trace_assistant = qtn.MPS_product_state(trace_vectors)
 
+    # Contract the MPS with the trace assistant MPS
     return complex(trace_assistant @ mps)
     
     
-
+# Utility functions to construct local Hamiltonian
 def local_ham_osc(omega, localDim):
     
     return omega * (np.kron(N_operator,np.eye(localDim))-np.kron(np.eye(localDim),N_operator.T))
 
+# Utility functions to construct local dissipator
 def local_dissipator(omega, temp, localDim):
     
     if temp == 0:
