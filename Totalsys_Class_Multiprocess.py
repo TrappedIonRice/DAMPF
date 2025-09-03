@@ -9,7 +9,7 @@ import quimb.tensor as qtn
 import config
 from tqdm import tqdm
 import scipy.linalg
-import math
+from multiprocessing import Pool, cpu_count
 
 
 a = utils.annihilation_operator(config.localDim)
@@ -46,7 +46,7 @@ class Totalsys_Rho:
         self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
         
         # Population initialization
-        self.populations = [[] for _ in range(nsites)]
+        self.populations = np.zeros((nsites, int(config.time/config.timestep)))
         # self.test_populations = np.zeros((nsites, int(config.time/config.timestep)))
         
         # Parameter information initialization
@@ -62,7 +62,7 @@ class Totalsys_Rho:
         self.exchange = config.exchange
         self.a = a
         self.a_dag = a_dag
-        self.el_ham = self.exchange + np.diag(self.energies) 
+        self.max_bond_dim = config.maxBondDim
     
     # def Test_Time_Evolve(self, timesteps, dt):
         
@@ -86,7 +86,7 @@ class Totalsys_Rho:
     #         for i in range(self.nsites):
     #             self.test_populations[i][step] = rho[i][i].real
         
-    def Time_Evolve(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
+    def Time_Evolve(self, timesteps, dt):
         
         '''
         The Total system is described by three parts of Hamiltonian.
@@ -103,132 +103,77 @@ class Totalsys_Rho:
         These three Hamiltonians will be used to calculate the commutator [H, rho], from which we can get the evolution superoperators for a small time step dt. These superoperators, together with the superoperators from the dissipators, will be used to time evolve the flattened density matrix in MPS form.
         '''
         
-        current_time = 0.0
-        dt = initial_dt
-        step = 0
-        Time = []
+        # Three evolution gates
+        self.osc_gates = self.get_osc_gates(dt/2)
+        self.int_gates = self.get_int_gates(dt/2)
+        self.el_coeffients = self.get_el_coeffients(dt)
         
-        # Main time evolution loop (using 2nd order Trotter decomposition)
-        # with tqdm(total=total_time, desc="Integrating", unit="t") as pbar:
+        with Pool(processes=cpu_count()) as p:
             
-        while current_time < total_time:
-            
-            ns = self.nsites
-            nosc = self.nosc
-            localDim = self.localDim
-            
-            if current_time+dt > total_time:
-                dt = total_time - current_time
+            # Main time evolution loop
+            for step in tqdm(range(timesteps)):
                 
-            rho1 = self.specific_time_evolve(self.rho, dt, max_bond_dim)
-            
-            rho_temp = self.specific_time_evolve(self.rho, dt/2, max_bond_dim)
-            rho2 = self.specific_time_evolve(rho_temp, dt/2, max_bond_dim)
-            
-            err = utils.calculate_error(rho1, rho2, ns, nosc, localDim)
-            
-            if err == 0:
-                dt_est = dt * S2
-            else:
-                dt_est = dt * abs(err_tol/err)**(1/3)   # ??????????????????????
+                osc_int_tasks = [(i, j) for i in range(self.nsites) for j in range(self.nsites) if i <= j]
+                
+                p.starmap(self.osc_int_worker, osc_int_tasks, chunksize=max(1, len(osc_int_tasks)//(cpu_count()*4)))
                     
-            dt_new = S1 * dt_est
-            if dt_new > S2 * dt:
-                dt_new = S2 * dt
-            elif dt_new < dt / S2:
-                dt_new = dt / S2
+                self.dagger_completion()
+                        
+                el_tasks = [(m, n) for m in range(self.nsites) for n in range(self.nsites)]
+                new_rho = p.starmap(self.el_worker, el_tasks, chunksize=max(1, len(el_tasks)//(cpu_count()*4)))
                 
-            if err < err_tol:
+                for i in range(self.nsites):
+                    for j in range(self.nsites):
+                        self.rho[i][j] = new_rho[i*self.nsites + j]
+            
+                int_osc_tasks = [(i, j) for i in range(self.nsites) for j in range(self.nsites) if i <= j]
+                p.starmap(self.int_osc_worker, int_osc_tasks, chunksize=max(1, len(int_osc_tasks)//(cpu_count()*4)))
+                    
+                self.dagger_completion()
+                
+                compression_tasks = [(i, j) for i in range(self.nsites) for j in range(self.nsites)]
+                p.starmap(self.compression_worker, compression_tasks, chunksize=max(1, len(compression_tasks)//(cpu_count()*4)))
+                
+                # Update populations after each time step
+                self.update_populations(step)
+            
+    def update_populations(self, step):
+        
+        for n in range(self.nsites):
+            self.populations[n][step] = utils.trace_MPS(self.rho[n][n], self.nosc, self.nsites, self.localDim).real
+            
+    def osc_int_worker(self, i, j):
+    
+        self.rho[i][j] = self.rho[i][j].gate_with_mpo(self.osc_gates)
+        self.rho[i][j] = self.rho[i][j].gate_with_mpo(self.int_gates[i][j])
+        
+    def int_osc_worker(self, i, j):
+        
+        self.rho[i][j] = self.rho[i][j].gate_with_mpo(self.int_gates[i][j])
+        self.rho[i][j] = self.rho[i][j].gate_with_mpo(self.osc_gates)
+        
+    def compression_worker(self, i, j):
 
-                Time.append(current_time)
-                # pbar.update(dt)
-                print(f"Step {step}: dt = {dt:.6f}")
-                print()
-                current_time += dt
-                self.rho = rho2
-                self.update_populations(step, ns)
-                dt = dt_new
-                step += 1
-                
-            else:
-                print(f"Step {step}: dt = {dt:.6f}")
-                dt = dt_new
-                
-        return Time
-            
-    def update_populations(self, step, ns):
+        self.rho[i][j].compress(max_bond=self.max_bond_dim)
         
-        for n in range(ns):
-            self.populations[n].append(utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
-            
-            
-    def specific_time_evolve(self, rho, dt, max_bond_dim):
-        
-        ns = self.nsites
-        
-        # Two evolution gates
-        osc_gates = self.get_osc_gates(dt/2)
-        int_gates = self.get_int_gates(dt/2)
+    def el_worker(self, m, n):
 
-        # Electronic evolution Coefficients
-        U_el = scipy.linalg.expm(-1j * dt * self.el_ham)
-        U_el_dag = U_el.conj().T
-        
-        result_rho = rho
-            
-        # Oscillator part and interaction part evolution with dt/2
-        for i in range(ns):
-            for j in range(ns):
-                if i <= j:
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
+        for k in range(self.nsites):
+            for l in range(self.nsites):
+                if (k == 0) and (l == 0):
+                    result = self.el_coeffients[m][n][k][l] * self.rho[k][l]
                 else:
-                    # Use the Hermitian property of the density matrix to reduce computation
-                    result_rho[i][j] = result_rho[j][i].conj()
-
-        # Electronic evolution step 1: compute S[k][n] = sum_l U_el_dag[l, n] * rho[k][l]
-        S = [[None for _ in range(ns)] for _ in range(ns)]
-        for k in range(ns):
-            for n in range(ns):
-                acc = None
-                Ud_col = U_el_dag[:, n]  # column vector
-                for l in range(ns):
-                    term = Ud_col[l] * result_rho[k][l]    # scalar * MPS
-                    acc = term if acc is None else (acc + term)
-                S[k][n] = acc
-
-        # Electronic evolution step 2: compute new_rho[m][n] = sum_k U_el[m, k] * S[k, n]
-        new_rho = [[None for _ in range(ns)] for _ in range(ns)]
-        for m in range(ns):
-            U_row = U_el[m, :]  # row vector
-            for n in range(ns):
-                acc = None
-                for k in range(ns):
-                    term = U_row[k] * S[k][n]      # scalar * (accumulated MPS)
-                    acc = term if acc is None else (acc + term)
-                new_rho[m][n] = acc
-
-        # write back the evolved density
-        result_rho = new_rho
+                    result += self.el_coeffients[m][n][k][l] * self.rho[k][l]
+                    
+        return result
+         
+    def dagger_completion(self):
         
-        # Interaction part and oscillator part evolution with dt/2
-        for i in range(ns):
-            for j in range(ns):
-                if i <= j:
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
-                else:
-                    # Use the Hermitian property of the density matrix to reduce computation
-                    result_rho[i][j] = result_rho[j][i].conj()
-        
-        # Compress the MPS after each time step to control the bond dimension
-        for i in range(ns):
-            for j in range(ns):
-                result_rho[i][j].compress(max_bond=max_bond_dim)
-                
-        return result_rho
-                
+        for i in range(self.nsites):
+            for j in range(i):
+                self.rho[i][j] = self.rho[j][i].conj()
             
+               
     # The evolution gates of local oscillators are identical among all matrix elements (matrix elements refer to the elements in the total system density matrix), so we only return one MPO here.
     def get_osc_gates(self, dt):
         
@@ -256,3 +201,22 @@ class Totalsys_Rho:
                 int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
                 
         return int_gates
+    
+    # The electronic evolution are described by a set of coefficients, which are used to linearly combine the matrix elements to get the new matrix elements after time evolution.
+    def get_el_coeffients(self, dt):
+        
+        cutoff=1e-12
+        el_ham = self.exchange + np.diag(self.energies)
+        
+        U_el = scipy.linalg.expm(-1j * dt * el_ham)
+        U_el_dag = U_el.conj().T
+        
+        Coefficients = np.zeros((self.nsites, self.nsites,self.nsites, self.nsites), dtype=complex)
+        for m in range(self.nsites):
+            for n in range(self.nsites):
+                for k in range(self.nsites):
+                    for l in range(self.nsites):
+                        if np.abs(U_el[m][k] * U_el_dag[l][n]) > cutoff:
+                            Coefficients[m][n][k][l] = U_el[m][k] * U_el_dag[l][n]
+                            
+        return Coefficients

@@ -79,7 +79,7 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
 
 # The trace of an MPS (sitewisely flattened MPO) cannot be calculated directly using the built-in function in quimb, so we define our own function here.
 # We are calculating the trace by contracting the MPS with a series of identical vectors that pick out the diagonal elements.
-def trace_MPS(mps, nosc, nsites, localDim):
+def trace_MPS(mps, nosc, localDim):
     
     trace_vec = np.zeros(localDim**2, dtype=complex)
     trace_vec[::localDim+1] = 1    # set diagonal elements to 1
@@ -104,3 +104,16 @@ def local_dissipator(omega, temp, localDim):
         n_bar = 1 / (np.expm1(omega / temp))
         
     return (n_bar + 1) * (np.kron(a,np.conj(a)) - 0.5 * (np.kron(np.eye(localDim),N_operator.T) + np.kron(N_operator,np.eye(localDim)))) + n_bar * (np.kron(a_dag,np.conj(a_dag)) - 0.5 * (np.kron(np.eye(localDim),N1_operator.T) + np.kron(N1_operator,np.eye(localDim)))) 
+
+def calculate_error(rho1, rho2, ns, nosc, localDim):
+    partial_rho1 = partial_trace(rho1, ns, nosc, localDim)
+    partial_rho2 = partial_trace(rho2, ns, nosc, localDim)
+    return 0.5*np.abs(np.linalg.eigvalsh(partial_rho1-partial_rho2)).sum()
+
+def partial_trace(rho, ns, nosc, localDim):
+    
+    partial_rho = np.zeros((ns, ns), dtype=complex)
+    for i in range(ns):
+        for j in range(ns):
+            partial_rho[i][j] = trace_MPS(rho[i][j], nosc, localDim)
+    return partial_rho
