@@ -108,7 +108,7 @@ def local_dissipator(omega, temp, localDim):
 def calculate_error(rho1, rho2, ns, nosc, localDim):
     partial_rho1 = partial_trace(rho1, ns, nosc, localDim)
     partial_rho2 = partial_trace(rho2, ns, nosc, localDim)
-    return 0.5*np.abs(np.linalg.eigvalsh(partial_rho1-partial_rho2)).sum()
+    return np.linalg.norm(partial_rho1 - partial_rho2, 'fro')
 
 def partial_trace(rho, ns, nosc, localDim):
     

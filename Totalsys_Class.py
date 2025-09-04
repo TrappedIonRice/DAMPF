@@ -10,6 +10,7 @@ import config
 from tqdm import tqdm
 import scipy.linalg
 import math
+import copy
 
 
 a = utils.annihilation_operator(config.localDim)
@@ -109,50 +110,48 @@ class Totalsys_Rho:
         Time = []
         
         # Main time evolution loop (using 2nd order Trotter decomposition)
-        # with tqdm(total=total_time, desc="Integrating", unit="t") as pbar:
+        with tqdm(total=total_time, desc="Integrating", unit="t") as pbar:
             
-        while current_time < total_time:
-            
-            ns = self.nsites
-            nosc = self.nosc
-            localDim = self.localDim
-            
-            if current_time+dt > total_time:
-                dt = total_time - current_time
+            while current_time < total_time:
                 
-            rho1 = self.specific_time_evolve(self.rho, dt, max_bond_dim)
-            
-            rho_temp = self.specific_time_evolve(self.rho, dt/2, max_bond_dim)
-            rho2 = self.specific_time_evolve(rho_temp, dt/2, max_bond_dim)
-            
-            err = utils.calculate_error(rho1, rho2, ns, nosc, localDim)
-            
-            if err == 0:
-                dt_est = dt * S2
-            else:
-                dt_est = dt * abs(err_tol/err)**(1/3)   # ??????????????????????
+                ns = self.nsites
+                nosc = self.nosc
+                localDim = self.localDim
+                
+                if current_time + dt > total_time:
+                    dt = total_time - current_time
                     
-            dt_new = S1 * dt_est
-            if dt_new > S2 * dt:
-                dt_new = S2 * dt
-            elif dt_new < dt / S2:
-                dt_new = dt / S2
+                rho0 = copy.deepcopy(self.rho)
+                rho1 = self.specific_time_evolve(copy.deepcopy(rho0), dt, max_bond_dim)
                 
-            if err < err_tol:
+                rho_temp = self.specific_time_evolve(copy.deepcopy(rho0), dt/2, max_bond_dim)
+                rho2 = self.specific_time_evolve(copy.deepcopy(rho_temp), dt/2, max_bond_dim)
+                
+                err = utils.calculate_error(rho1, rho2, ns, nosc, localDim)
+                
+                if err == 0:
+                    dt_est = dt * S2
+                else:
+                    dt_est = dt * abs(err_tol/err)**(1/3)
+                        
+                dt_new = S1 * dt_est
+                if dt_new > S2 * dt:
+                    dt_new = S2 * dt
+                elif dt_new < dt / S2:
+                    dt_new = dt / S2
+                    
+                if err < err_tol:
 
-                Time.append(current_time)
-                # pbar.update(dt)
-                print(f"Step {step}: dt = {dt:.6f}")
-                print()
-                current_time += dt
-                self.rho = rho2
-                self.update_populations(step, ns)
-                dt = dt_new
-                step += 1
-                
-            else:
-                print(f"Step {step}: dt = {dt:.6f}")
-                dt = dt_new
+                    Time.append(current_time)
+                    pbar.update(dt)
+                    current_time += dt
+                    self.rho = rho2
+                    self.update_populations(step, ns)
+                    dt = dt_new
+                    step += 1
+                    
+                else:
+                    dt = dt_new
                 
         return Time
             

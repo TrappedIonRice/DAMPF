@@ -16,10 +16,10 @@ nosc = noscpersite         # total number of oscillators
 localDim = 10              # local dimension of oscillators
 maxBondDim = 10            # maximal bond dimension of MPS
 initial_dt = 0.5           # integration time-step
-time = 200                 # total simulation time
+time = 50                  # total simulation time
 error_tolerance = 1e-4     # error tolerance for adaptive time-stepping
 S1 = 0.9
-S2 = 2.0
+S2 = 4
 
 # -----------------------------------------------
 # Parameters for system dynamics
