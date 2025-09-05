@@ -5,7 +5,7 @@ This module contains utility functions for convenience in the simulation.
 
 import quimb.tensor as qtn
 import numpy as np
-import config
+import DAMPF.config
 
 # Construct annihilation and creation operators for a single harmonic oscillator
 def annihilation_operator(N, dtype=complex):
@@ -16,7 +16,7 @@ def annihilation_operator(N, dtype=complex):
         a[n-1, n] = np.sqrt(n)
     return a
 
-a= annihilation_operator(config.localDim)
+a= annihilation_operator(DAMPF.config.localDim)
 a_dag = a.conj().T
 N_operator = a_dag @ a
 N1_operator = a @ a_dag
@@ -105,11 +105,13 @@ def local_dissipator(omega, temp, localDim):
         
     return (n_bar + 1) * (np.kron(a,np.conj(a)) - 0.5 * (np.kron(np.eye(localDim),N_operator.T) + np.kron(N_operator,np.eye(localDim)))) + n_bar * (np.kron(a_dag,np.conj(a_dag)) - 0.5 * (np.kron(np.eye(localDim),N1_operator.T) + np.kron(N1_operator,np.eye(localDim)))) 
 
+# Using the Frobenius norm of the difference between two reduced density matrices as the error measure for adaptive time-stepping
 def calculate_error(rho1, rho2, ns, nosc, localDim):
     partial_rho1 = partial_trace(rho1, ns, nosc, localDim)
     partial_rho2 = partial_trace(rho2, ns, nosc, localDim)
     return np.linalg.norm(partial_rho1 - partial_rho2, 'fro')
 
+# Utility function to perform partial trace over the oscillator degrees of freedom
 def partial_trace(rho, ns, nosc, localDim):
     
     partial_rho = np.zeros((ns, ns), dtype=complex)

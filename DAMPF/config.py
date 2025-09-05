@@ -10,34 +10,42 @@ import numpy as np
 # -----------------------------------------------
 # Basic system parameters
 # -----------------------------------------------
-nsites = 5                 # number of sites
-noscpersite = 10           # number of oscillators per site
-nosc = noscpersite         # total number of oscillators
-localDim = 10              # local dimension of oscillators
-maxBondDim = 10            # maximal bond dimension of MPS
-timestep = 0.5             # integration time-step
-time = 5000                # total simulation time
+nsites = 2                  # number of sites
+noscpersite = 2             # number of oscillators per site
+nosc = noscpersite          # total number of oscillators
+localDim = 10               # local dimension of oscillators
+maxBondDim = 10             # maximal bond dimension of MPS
+
+
+# -----------------------------------------------
+# Parameters for time evolution
+# -----------------------------------------------
+initial_dt = 0.5            # integration time-step
+time = 400                  # total simulation time
+error_tolerance = 1e-4      # error tolerance for adaptive time-stepping
+S1 = 0.9                    # time-step adjustment parameter 1 (0 < S1 < 1)
+S2 = 4                      # time-step adjustment parameter 2 (S2 > 1)
+
+# We need the half-valued array of time steps for error calculation in the adaptive time-stepping scheme.
+dt_array = np.linspace(0.1, 0.6, 11)
+dt_array = np.vstack((dt_array, dt_array/2))
 
 # -----------------------------------------------
 # Parameters for system dynamics
 # -----------------------------------------------
 
 # Site energies (E_n)
-energies = [5,4.7,4.5,4.3,4]
+energies = [0.5, -0.5]
 
 # Exchange coupling (which is the off-diagonal part of the El_Hamiltonian)
 # We assume uniform coupling between all sites here for simplicity, but this can be readily changed into cases with different couplings among sites.
 exchange_per_site = 0.05
 
 # Parameters for oscillators
-freqs_per_site = [1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8]   # frequencies of oscillators
+freqs_per_site = [1, 1.2]
 temp_K = 0
-coupling_strength = [[1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8],
-                     [1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8],
-                     [1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8],
-                     [1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8],
-                     [1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.4, 2.6, 2.8]]
-damping_rate_per_osc = [0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05]
+coupling_strength = [[0.5, 0.6], [-0.5, -0.6]]
+damping_rate_per_osc = [0.05, 0.05]
 
 # -----------------------------------------------
 # Conversion constants
@@ -71,8 +79,13 @@ if __name__ == "__main__":
     print("nosc =", nosc)
     print("localDim =", localDim)
     print("maxBondDim =", maxBondDim)
-    print("timestep =", timestep)
+    print()
+    print("initial_dt =", initial_dt)
     print("time =", time)
+    print("error_tolerance =", error_tolerance)
+    print("S1 =", S1)
+    print("S2 =", S2)
+    print("dt_array =", dt_array)
     print()
     print("energies =", energies)
     print("exchange matrix:\n", exchange)

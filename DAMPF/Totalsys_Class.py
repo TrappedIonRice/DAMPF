@@ -4,16 +4,14 @@ This module defines the Totalsys_Rho class, which is the core part of this whole
 
 
 import numpy as np
-import utils
+import DAMPF.utils
 import quimb.tensor as qtn
-import config
+import DAMPF.config
 from tqdm import tqdm
 import scipy.linalg
-import math
-import copy
 
 
-a = utils.annihilation_operator(config.localDim)
+a = DAMPF.utils.annihilation_operator(DAMPF.config.localDim)
 a_dag = a.conj().T
 
 
@@ -28,15 +26,16 @@ as well as methods for time evolution, population update, and construction of va
 
 1. __init__: Initializes everything
 2. Time_Evolve: Time evolve the total system density matrix with the help of various gates
-3. update_populations: Update the population dynamics after each time step
-4. Various gates (as illustrated below)
+3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
+4. update_populations: Update the population dynamics after each time step
+5. Various gates (as illustrated below)
 
 '''
 class Totalsys_Rho:
     
-    def __init__(self, nsites, noscpersite, nosc, localDim, temps, freqs, damps, coups):
+    def __init__(self, nsites, noscpersite, nosc, localDim, temps, freqs, damps, coups, dt_array):
         
-        thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
+        thermal_mps = DAMPF.utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
         # The zero_mps should be in the same structure as the thermal_mps, otherwise it will cause an error when adding two different-structured MPSs.
         zero_mps = thermal_mps.copy()
@@ -48,7 +47,7 @@ class Totalsys_Rho:
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]
-        # self.test_populations = np.zeros((nsites, int(config.time/config.timestep)))
+        # self.test_populations = np.zeros((nsites, int(DAMPF.config.time/DAMPF.config.timestep)))
         
         # Parameter information initialization
         self.nsites = nsites
@@ -59,33 +58,23 @@ class Totalsys_Rho:
         self.freqs = freqs
         self.damps = damps
         self.coups = coups
-        self.energies = config.energies
-        self.exchange = config.exchange
+        self.energies = DAMPF.config.energies
+        self.exchange = DAMPF.config.exchange
         self.a = a
         self.a_dag = a_dag
-        self.el_ham = self.exchange + np.diag(self.energies) 
-    
-    # def Test_Time_Evolve(self, timesteps, dt):
+        self.el_ham = self.exchange + np.diag(self.energies)
+        self.dt_array = dt_array
         
-    #     rho = np.zeros((self.nsites, self.nsites), dtype=complex)
-    #     rho[0][0] = 1.0 + 0j
-        
-    #     for step in tqdm(range(timesteps)):
-            
-    #         new_rho = np.empty((self.nsites, self.nsites), dtype=complex)
-    #         for m in range(self.nsites):
-    #             for n in range(self.nsites):
-    #                 for k in range(self.nsites):
-    #                     for l in range(self.nsites):
-    #                         if (k == 0) and (l == 0):
-    #                             new_rho[m][n] = self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
-    #                         else:
-    #                             new_rho[m][n] += self.get_el_coeffients(dt)[m][n][k][l] * rho[k][l]
-                                                                
-    #         rho = new_rho   
-                                                    
-    #         for i in range(self.nsites):
-    #             self.test_populations[i][step] = rho[i][i].real
+        # Pre-construct various evolution gates for all possible discrete dt values in dt_array
+        print("Constructing various evolution gates...")
+        print("It may take a while, please be patient.")
+        self.osc_gates_dt_div_2 = [[self.get_osc_gates(dt/2) for dt in dt_row] for dt_row in dt_array]
+        print("Oscillator gates constructed.")
+        self.int_gates_dt_div_2 = [[self.get_int_gates(dt/2) for dt in dt_row] for dt_row in dt_array]
+        print("Interaction gates constructed.")
+        self.U_els_dt_div_1 = [[self.get_U_els(dt) for dt in dt_row] for dt_row in dt_array]
+        print("Electronic evolution operators constructed.")
+
         
     def Time_Evolve(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
         
@@ -109,7 +98,7 @@ class Totalsys_Rho:
         step = 0
         Time = []
         
-        # Main time evolution loop (using 2nd order Trotter decomposition)
+        # Main time evolution loop (using adaptive time step method based on the order-2 Suzuki-Trotter method)
         with tqdm(total=total_time, desc="Integrating", unit="t") as pbar:
             
             while current_time < total_time:
@@ -118,30 +107,48 @@ class Totalsys_Rho:
                 nosc = self.nosc
                 localDim = self.localDim
                 
+                # The last time step
                 if current_time + dt > total_time:
                     dt = total_time - current_time
+                    pbar.update(dt)
+                    current_time += dt
+                    break
                     
-                rho0 = copy.deepcopy(self.rho)
-                rho1 = self.specific_time_evolve(copy.deepcopy(rho0), dt, max_bond_dim)
+                if np.all(self.dt_array[0] > dt):
+                    print("Warning: The current time step is smaller than the minimum value in dt_array[0].")
+                    print("Please consider using a modified dt_array.")
+                    exit()
+                elif np.all(self.dt_array[0] < dt):
+                    print("Warning: The current time step is larger than the maximum value in dt_array[0].")
                 
-                rho_temp = self.specific_time_evolve(copy.deepcopy(rho0), dt/2, max_bond_dim)
-                rho2 = self.specific_time_evolve(copy.deepcopy(rho_temp), dt/2, max_bond_dim)
+                # Find the closest dt in dt_array that is smaller than or equal to the current dt value, and get its index
+                dt = max(self.dt_array[0][self.dt_array[0] <= dt], default=None)
+                dt_index = np.where(self.dt_array[0] == dt)[0][0]
                 
-                err = utils.calculate_error(rho1, rho2, ns, nosc, localDim)
+                # Perform one evolution with dt (indicator=0) and two evolutions with dt/2 (indicator=1), then compare the results to estimate the local error    
+                rho0 = self.rho.copy()
+                rho1 = self.specific_time_evolve(rho0.copy(), dt_index, 0, max_bond_dim)
+                rho_temp = self.specific_time_evolve(rho0.copy(), dt_index, 1, max_bond_dim)
+                rho2 = self.specific_time_evolve(rho_temp.copy(), dt_index, 1, max_bond_dim)
                 
+                err = DAMPF.utils.calculate_error(rho1, rho2, ns, nosc, localDim)
+                
+                # Estimate the new time step based on the local error
                 if err == 0:
                     dt_est = dt * S2
                 else:
                     dt_est = dt * abs(err_tol/err)**(1/3)
-                        
+                
+                # Further limit the change of time step
                 dt_new = S1 * dt_est
                 if dt_new > S2 * dt:
                     dt_new = S2 * dt
                 elif dt_new < dt / S2:
                     dt_new = dt / S2
-                    
+                
+                # Accept the current step if the local error is smaller than the error tolerance
                 if err < err_tol:
-
+                    
                     Time.append(current_time)
                     pbar.update(dt)
                     current_time += dt
@@ -149,8 +156,11 @@ class Totalsys_Rho:
                     self.update_populations(step, ns)
                     dt = dt_new
                     step += 1
-                    
+                
+                # Otherwise reject it and redo the step with the new time step
                 else:
+                    
+                    print(f"Step {step}: Rejected due to large local error {err:.2e} > {err_tol:.2e}. Redoing with dt = {dt_new:.2e}.")
                     dt = dt_new
                 
         return Time
@@ -158,19 +168,23 @@ class Totalsys_Rho:
     def update_populations(self, step, ns):
         
         for n in range(ns):
-            self.populations[n].append(utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
+            self.populations[n].append(DAMPF.utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
             
-            
-    def specific_time_evolve(self, rho, dt, max_bond_dim):
+    '''
+    This specific_time_evolve function performs time evolution using order-2 Suzuki-Trotter method, the formula expressed via superoperators is as follows:
+    rho(t+dt) = e^{(L_osc + D_osc) dt/2} e^{L_int dt/2} e^{L_el dt} e^{L_int dt/2} e^{(L_osc + D_osc) dt/2} rho(t)
+    '''
+    def specific_time_evolve(self, rho, dt_index, indicator, max_bond_dim):
         
         ns = self.nsites
         
         # Two evolution gates
-        osc_gates = self.get_osc_gates(dt/2)
-        int_gates = self.get_int_gates(dt/2)
+        osc_gates = self.osc_gates_dt_div_2[indicator][dt_index]
+        int_gates = self.int_gates_dt_div_2[indicator][dt_index]
 
-        # Electronic evolution Coefficients
-        U_el = scipy.linalg.expm(-1j * dt * self.el_ham)
+        # Electronic evolution Matrix
+        # U_el = scipy.linalg.expm(-1j * dt * self.el_ham)
+        U_el = self.U_els_dt_div_1[indicator][dt_index]
         U_el_dag = U_el.conj().T
         
         result_rho = rho
@@ -185,30 +199,8 @@ class Totalsys_Rho:
                     # Use the Hermitian property of the density matrix to reduce computation
                     result_rho[i][j] = result_rho[j][i].conj()
 
-        # Electronic evolution step 1: compute S[k][n] = sum_l U_el_dag[l, n] * rho[k][l]
-        S = [[None for _ in range(ns)] for _ in range(ns)]
-        for k in range(ns):
-            for n in range(ns):
-                acc = None
-                Ud_col = U_el_dag[:, n]  # column vector
-                for l in range(ns):
-                    term = Ud_col[l] * result_rho[k][l]    # scalar * MPS
-                    acc = term if acc is None else (acc + term)
-                S[k][n] = acc
-
-        # Electronic evolution step 2: compute new_rho[m][n] = sum_k U_el[m, k] * S[k, n]
-        new_rho = [[None for _ in range(ns)] for _ in range(ns)]
-        for m in range(ns):
-            U_row = U_el[m, :]  # row vector
-            for n in range(ns):
-                acc = None
-                for k in range(ns):
-                    term = U_row[k] * S[k][n]      # scalar * (accumulated MPS)
-                    acc = term if acc is None else (acc + term)
-                new_rho[m][n] = acc
-
-        # write back the evolved density
-        result_rho = new_rho
+        # Electronic part evolution
+        result_rho = np.dot(U_el, np.dot(result_rho, U_el_dag))
         
         # Interaction part and oscillator part evolution with dt/2
         for i in range(ns):
@@ -233,7 +225,7 @@ class Totalsys_Rho:
         
         local_ops = []
         for i in range(self.nosc):
-            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
+            local_ops.append(scipy.linalg.expm(-1j * dt * DAMPF.utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * DAMPF.utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
         
         # Combine local operators into an MPO, with bond dimensions of 1   
         return qtn.MPO_product_operator(local_ops)
@@ -255,3 +247,8 @@ class Totalsys_Rho:
                 int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
                 
         return int_gates
+    
+    # The electronic evolution operator is simply a matrix of complex numbers
+    def get_U_els(self, dt):
+        
+        return scipy.linalg.expm(-1j * dt * self.el_ham)
