@@ -21,7 +21,7 @@ maxBondDim = 10             # maximal bond dimension of MPS
 # Parameters for time evolution
 # -----------------------------------------------
 initial_dt = 0.5            # integration time-step
-time = 400                  # total simulation time
+time = 200                  # total simulation time
 error_tolerance = 1e-4      # error tolerance for adaptive time-stepping
 S1 = 0.9                    # time-step adjustment parameter 1 (0 < S1 < 1)
 S2 = 4                      # time-step adjustment parameter 2 (S2 > 1)

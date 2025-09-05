@@ -4,14 +4,14 @@ This module defines the Totalsys_Rho class, which is the core part of this whole
 
 
 import numpy as np
-import DAMPF.utils
+from . import utils
 import quimb.tensor as qtn
-import DAMPF.config
+from . import config
 from tqdm import tqdm
 import scipy.linalg
 
 
-a = DAMPF.utils.annihilation_operator(DAMPF.config.localDim)
+a = utils.annihilation_operator(config.localDim)
 a_dag = a.conj().T
 
 
@@ -35,7 +35,7 @@ class Totalsys_Rho:
     
     def __init__(self, nsites, noscpersite, nosc, localDim, temps, freqs, damps, coups, dt_array):
         
-        thermal_mps = DAMPF.utils.create_thermal_mps(nosc, localDim, temps, freqs)
+        thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
         # The zero_mps should be in the same structure as the thermal_mps, otherwise it will cause an error when adding two different-structured MPSs.
         zero_mps = thermal_mps.copy()
@@ -47,7 +47,7 @@ class Totalsys_Rho:
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]
-        # self.test_populations = np.zeros((nsites, int(DAMPF.config.time/DAMPF.config.timestep)))
+        # self.test_populations = np.zeros((nsites, int(config.time/config.timestep)))
         
         # Parameter information initialization
         self.nsites = nsites
@@ -58,8 +58,8 @@ class Totalsys_Rho:
         self.freqs = freqs
         self.damps = damps
         self.coups = coups
-        self.energies = DAMPF.config.energies
-        self.exchange = DAMPF.config.exchange
+        self.energies = config.energies
+        self.exchange = config.exchange
         self.a = a
         self.a_dag = a_dag
         self.el_ham = self.exchange + np.diag(self.energies)
@@ -131,7 +131,7 @@ class Totalsys_Rho:
                 rho_temp = self.specific_time_evolve(rho0.copy(), dt_index, 1, max_bond_dim)
                 rho2 = self.specific_time_evolve(rho_temp.copy(), dt_index, 1, max_bond_dim)
                 
-                err = DAMPF.utils.calculate_error(rho1, rho2, ns, nosc, localDim)
+                err = utils.calculate_error(rho1, rho2, ns, nosc, localDim)
                 
                 # Estimate the new time step based on the local error
                 if err == 0:
@@ -168,7 +168,7 @@ class Totalsys_Rho:
     def update_populations(self, step, ns):
         
         for n in range(ns):
-            self.populations[n].append(DAMPF.utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
+            self.populations[n].append(utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
             
     '''
     This specific_time_evolve function performs time evolution using order-2 Suzuki-Trotter method, the formula expressed via superoperators is as follows:
@@ -225,7 +225,7 @@ class Totalsys_Rho:
         
         local_ops = []
         for i in range(self.nosc):
-            local_ops.append(scipy.linalg.expm(-1j * dt * DAMPF.utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * DAMPF.utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
+            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
         
         # Combine local operators into an MPO, with bond dimensions of 1   
         return qtn.MPO_product_operator(local_ops)

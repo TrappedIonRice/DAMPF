@@ -5,7 +5,7 @@ This module contains utility functions for convenience in the simulation.
 
 import quimb.tensor as qtn
 import numpy as np
-import DAMPF.config
+from . import config
 
 # Construct annihilation and creation operators for a single harmonic oscillator
 def annihilation_operator(N, dtype=complex):
@@ -16,7 +16,7 @@ def annihilation_operator(N, dtype=complex):
         a[n-1, n] = np.sqrt(n)
     return a
 
-a= annihilation_operator(DAMPF.config.localDim)
+a= annihilation_operator(config.localDim)
 a_dag = a.conj().T
 N_operator = a_dag @ a
 N1_operator = a @ a_dag
