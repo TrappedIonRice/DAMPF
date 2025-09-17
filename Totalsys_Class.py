@@ -1,33 +1,12 @@
 '''
-<<<<<<< HEAD
-This module defines the Totalsys_Rho class, which is the core part of this whole project.
-=======
 This file contains the class definitions for the total system in different simulation methods, including:
 1. Totalsys_Pure: Total system pure state with quantum trajectory method
 2. Totalsys_Rho_Fixed_Step: Total system density matrix with fixed time step method
 3. Totalsys_Rho_Adaptive_Step: Total system density matrix with adaptive time step method
->>>>>>> 94220de (Integrated Version)
 '''
 
 
 import numpy as np
-<<<<<<< HEAD
-from . import utils
-import quimb.tensor as qtn
-from . import config
-from tqdm import tqdm
-import scipy.linalg
-
-
-a = utils.annihilation_operator(config.localDim)
-a_dag = a.conj().T
-
-
-'''
-The class Totalsys_Rho consists of information of the total system, including:
-
-1. Parameters of the system (nsites, noscpersite, localDim, nosc, temps, freqs, damps, coups, energies, exchange, a, a_dag)
-=======
 import quimb.tensor as qtn
 import utils
 import scipy.linalg
@@ -360,24 +339,12 @@ class Totalsys_Rho_Fixed_Step:
 The class Totalsys_Rho_Adaptive_Step consists of information of the total system, including:
 
 1. Parameters of the system (self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array)
->>>>>>> 94220de (Integrated Version)
 2. The total system density matrix in MPS form (rho), which is a 2D array of shape (nsites, nsites), with each element being an MPS (flattened MPO) representing the density matrices of the oscillators
 3. The population dynamics during time evolution (populations), which will be updated after each time step by tracing out the diagonal MPS elements, resulting in nsites numbers,
 
 as well as methods for time evolution, population update, and construction of various evolution gates:
 
 1. __init__: Initializes everything
-<<<<<<< HEAD
-2. Time_Evolve: Time evolve the total system density matrix with the help of various gates
-3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
-4. update_populations: Update the population dynamics after each time step
-5. Various gates (as illustrated below)
-
-'''
-class Totalsys_Rho:
-    
-    def __init__(self, nsites, noscpersite, nosc, localDim, temps, freqs, damps, coups, dt_array):
-=======
 2. Time_Evolve_Rho_Adaptive_Step: Time evolve the total system density matrix with the help of various gates
 3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
 4. update_populations: Update the population dynamics after each time step
@@ -387,7 +354,6 @@ class Totalsys_Rho:
 class Totalsys_Rho_Adaptive_Step:
     
     def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array):
->>>>>>> 94220de (Integrated Version)
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -401,37 +367,21 @@ class Totalsys_Rho_Adaptive_Step:
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]
-<<<<<<< HEAD
-        # self.test_populations = np.zeros((nsites, int(config.time/config.timestep)))
         
         # Parameter information initialization
         self.nsites = nsites
-        self.noscpersite = noscpersite
-=======
-        
-        # Parameter information initialization
-        self.nsites = nsites
->>>>>>> 94220de (Integrated Version)
         self.localDim = localDim
         self.nosc = nosc
         self.temps = temps
         self.freqs = freqs
         self.damps = damps
         self.coups = coups
-<<<<<<< HEAD
-        self.energies = config.energies
-        self.exchange = config.exchange
-        self.a = a
-        self.a_dag = a_dag
-        self.el_ham = self.exchange + np.diag(self.energies)
-=======
         self.elham = elham
         self.a = utils.annihilation_operator(localDim)
         self.a_dagger = self.a.conj().T
         self.N_operator = self.a_dagger @ self.a
         self.N1_operator = self.a @ self.a_dagger
         
->>>>>>> 94220de (Integrated Version)
         self.dt_array = dt_array
         
         # Pre-construct various evolution gates for all possible discrete dt values in dt_array
@@ -445,11 +395,7 @@ class Totalsys_Rho_Adaptive_Step:
         print("Electronic evolution operators constructed.")
 
         
-<<<<<<< HEAD
-    def Time_Evolve(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
-=======
     def Time_Evolve_Rho_Adaptive_Step(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
->>>>>>> 94220de (Integrated Version)
         
         '''
         The Total system is described by three parts of Hamiltonian.
@@ -556,14 +502,8 @@ class Totalsys_Rho_Adaptive_Step:
         int_gates = self.int_gates_dt_div_2[indicator][dt_index]
 
         # Electronic evolution Matrix
-<<<<<<< HEAD
-        # U_el = scipy.linalg.expm(-1j * dt * self.el_ham)
-        U_el = self.U_els_dt_div_1[indicator][dt_index]
-        U_el_dag = U_el.conj().T
-=======
         U_el = self.U_els_dt_div_1[indicator][dt_index]
         U_el_dagger = U_el.conj().T
->>>>>>> 94220de (Integrated Version)
         
         result_rho = rho
             
@@ -571,10 +511,6 @@ class Totalsys_Rho_Adaptive_Step:
         for i in range(ns):
             for j in range(ns):
                 if i <= j:
-<<<<<<< HEAD
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
-=======
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(
                         osc_gates,
                         method='zipup',
@@ -587,34 +523,17 @@ class Totalsys_Rho_Adaptive_Step:
                         max_bond=max_bond_dim,
                         cutoff=1e-8,
                     )
->>>>>>> 94220de (Integrated Version)
                 else:
                     # Use the Hermitian property of the density matrix to reduce computation
                     result_rho[i][j] = result_rho[j][i].conj()
 
         # Electronic part evolution
-<<<<<<< HEAD
-        result_rho = np.dot(U_el, np.dot(result_rho, U_el_dag))
-=======
         result_rho = np.dot(U_el, np.dot(result_rho, U_el_dagger))
->>>>>>> 94220de (Integrated Version)
         
         # Interaction part and oscillator part evolution with dt/2
         for i in range(ns):
             for j in range(ns):
                 if i <= j:
-<<<<<<< HEAD
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
-                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
-                else:
-                    # Use the Hermitian property of the density matrix to reduce computation
-                    result_rho[i][j] = result_rho[j][i].conj()
-        
-        # Compress the MPS after each time step to control the bond dimension
-        for i in range(ns):
-            for j in range(ns):
-                result_rho[i][j].compress(max_bond=max_bond_dim)
-=======
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(
                         int_gates[i][j],
                         method='zipup',
@@ -630,7 +549,6 @@ class Totalsys_Rho_Adaptive_Step:
                 else:
                     # Use the Hermitian property of the density matrix to reduce computation
                     result_rho[i][j] = result_rho[j][i].conj()
->>>>>>> 94220de (Integrated Version)
                 
         return result_rho
                 
@@ -640,11 +558,7 @@ class Totalsys_Rho_Adaptive_Step:
         
         local_ops = []
         for i in range(self.nosc):
-<<<<<<< HEAD
-            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
-=======
             local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim, self.N_operator) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim, self.a, self.a_dagger, self.N_operator, self.N1_operator)))
->>>>>>> 94220de (Integrated Version)
         
         # Combine local operators into an MPO, with bond dimensions of 1   
         return qtn.MPO_product_operator(local_ops)
@@ -652,20 +566,6 @@ class Totalsys_Rho_Adaptive_Step:
     # Conversely, the interaction gates are different among different matrix elements, so we return a 2D array of MPOs here.
     def get_int_gates(self, dt):
         
-<<<<<<< HEAD
-        int_gates = np.empty((self.nsites, self.nsites), dtype=object)
-        for m in range(self.nsites):
-            for n in range(self.nsites):
-                
-                # Construct the MPO for matrix element (m,n)
-                temporary_ops = []
-                for i in range(self.nosc):
-                    temporary_op = self.coups[m][i] * np.kron((self.a + self.a_dag),np.eye(self.localDim, dtype=complex)) - self.coups[n][i] * np.kron(np.eye(self.localDim, dtype=complex), (self.a + self.a_dag).T)
-                    temporary_ops.append(scipy.linalg.expm(-1j * dt * temporary_op))
-                
-                # Combine local operators into an MPO, with bond dimensions of 1
-                int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
-=======
         X = (self.a + self.a_dagger)              # shape (localDim, localDim)
         X_t = X.T
         ns = self.nsites
@@ -686,15 +586,10 @@ class Totalsys_Rho_Adaptive_Step:
                 for i in range(no):
                     local_ops.append(np.kron(expm_minus[m][i], expm_plus[n][i]))
                 int_gates[m][n] = qtn.MPO_product_operator(local_ops)
->>>>>>> 94220de (Integrated Version)
                 
         return int_gates
     
     # The electronic evolution operator is simply a matrix of complex numbers
     def get_U_els(self, dt):
         
-<<<<<<< HEAD
-        return scipy.linalg.expm(-1j * dt * self.el_ham)
-=======
         return scipy.linalg.expm(-1j * dt * self.elham)
->>>>>>> 94220de (Integrated Version)
