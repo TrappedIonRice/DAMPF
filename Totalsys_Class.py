@@ -1,9 +1,17 @@
 '''
+<<<<<<< HEAD
 This module defines the Totalsys_Rho class, which is the core part of this whole project.
+=======
+This file contains the class definitions for the total system in different simulation methods, including:
+1. Totalsys_Pure: Total system pure state with quantum trajectory method
+2. Totalsys_Rho_Fixed_Step: Total system density matrix with fixed time step method
+3. Totalsys_Rho_Adaptive_Step: Total system density matrix with adaptive time step method
+>>>>>>> 94220de (Integrated Version)
 '''
 
 
 import numpy as np
+<<<<<<< HEAD
 from . import utils
 import quimb.tensor as qtn
 from . import config
@@ -19,12 +27,347 @@ a_dag = a.conj().T
 The class Totalsys_Rho consists of information of the total system, including:
 
 1. Parameters of the system (nsites, noscpersite, localDim, nosc, temps, freqs, damps, coups, energies, exchange, a, a_dag)
+=======
+import quimb.tensor as qtn
+import utils
+import scipy.linalg
+from tqdm import tqdm
+
+
+gates = {}
+
+def init_gates(onsite_gate, interaction_gates, on_site_non_unitary_gates):
+    gates['onsite'] = onsite_gate
+    gates['interaction'] = interaction_gates
+    gates['on_site_non_unitary'] = on_site_non_unitary_gates
+
+
+'''
+The class Totalsys_Pure consists of information of the total system, including:
+
+1. Parameters of the system (nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state)
+2. The total system pure state in MPS form, which consists of a spin site at the very left and nosc oscillator sites following it.
+3. The population dynamics during time evolution (population), which will be updated after each time step by calculating the diagonal elements of the reduced density matrix of the electronic part, resulting in nsites numbers.
+
+as well as methods for quantum trajectory time evolution and population update:
+
+1. __init__: Initializes everything
+2. Time_Evolve_Pure_QT: Time evolve the total system pure state with the help of various gates and quantum jumps
+3. record_population: Update the population dynamics after each time step
+4. various gates (as illustrated in the utils.py file)
+'''
+
+class Totalsys_Pure:
+    
+    def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state):
+        
+        # Parameter information initialization
+        self.nsites = nsites
+        self.nosc = nosc
+        self.localDim = localDim
+        self.elham = elham
+        self.freqs = freqs
+        self.coups = coups
+        self.damps = damps
+        self.temps = temps
+        self.a = utils.annihilation_operator(localDim)
+        self.a_dagger = self.a.conj().T
+        
+        # Gates initialization
+        self.onsite_gate = gates['onsite']
+        self.interaction_gates = gates['interaction']
+        self.on_site_non_unitary_gates = gates['on_site_non_unitary']
+        
+        # State initialization
+        self.initialize_state(osc_state, localDim)
+        
+        # Population initialization
+        self.population = np.zeros((nsites, int(time/timestep)))
+        
+    def initialize_state(self, osc_state, localDim):
+        
+        init_el_state = [np.eye(self.nsites)[0]] # initially the excitation is on site 0
+        init_osc_state = [np.eye(localDim)[excitation] for excitation in osc_state]
+        self.state = qtn.MPS_product_state(init_el_state + init_osc_state)
+        
+    def Time_Evolve_Pure_QT(self, dt, total_time, maxBondDim):
+        
+        nsteps = int(total_time/dt)
+        
+        for step in range(nsteps):
+            
+            self.state.right_canonize()
+            '''
+            In Quantum Trajectory method, the tiny probability of quantum jumps is determined by the formula:
+            delta_p_m = <psi| C_m^\dagger C_m |psi> * dt,
+            where in our case, C_m is either sqrt(gamma_i * (nbar_i + 1)) * a_i or sqrt(gamma_i * nbar_i) * a_i^\dagger, representing the jump operators for the i-th oscillator. Therefore,
+            delta_p1_i = gamma_i * (nbar_i + 1) * <psi| N_i |psi> * dt
+            delta_p2_i = gamma_i * nbar_i * <psi| (N_i + 1) |psi> * dt
+            '''
+            occupation_number = utils.calculate_occupation_number(self.state, self.nosc, self.a, self.a_dagger)
+            probobility_1 = self.damps * (1 + self.temps) * dt * occupation_number
+            probobility_2 = self.damps * self.temps * dt * (occupation_number + 1)
+            probability = np.concatenate((probobility_1, probobility_2))
+            delta_p = np.sum(probability)
+            
+            # Add another option for no jump
+            probs = np.append(probability, 1 - delta_p)
+            choices = list(range(len(probability))) + [-1]
+            
+            try:
+                sample = np.random.choice(choices, p=probs)
+            except ValueError:
+                print("Something wrong happened when sampling the jump operators!")
+                print("Probabilities:", probs)
+                print("Sum of probabilities:", np.sum(probs))
+            
+            # No jump case
+            if sample == -1:
+            
+                self.state.gate_with_mpo(
+                    self.onsite_gate,
+                    method='zipup',
+                    max_bond=maxBondDim,
+                    cutoff=1e-8,
+                    canonize=True,
+                    normalize=True,
+                    inplace=True
+                )
+                
+                for gate in self.interaction_gates:
+                                    
+                    self.state.gate_with_submpo(
+                        gate,
+                        method='zipup',
+                        max_bond=maxBondDim,
+                        cutoff=1e-8,
+                        canonize=True,
+                        normalize=True,
+                        inplace=True
+                    )
+                
+                # In the non-jump case, we also need to apply the non-unitary gates to account for the non-Hermitian part of the effective Hamiltonian
+                for i,gate in enumerate(self.on_site_non_unitary_gates):
+                    
+                    self.state.gate(
+                        G=gate,
+                        where=i+1,
+                        inplace=True,
+                        contract=True
+                    )
+                    
+                self.state.normalize()
+                self.state.right_canonize() 
+                 
+            # Jump case
+            else:
+                
+                osc_index = sample % self.nosc
+                jump_type = sample // self.nosc    # 0 for a, 1 for a_dagger
+                
+                if jump_type == 0:
+                    jump_op = self.a
+                else:
+                    jump_op = self.a_dagger
+                
+                # The coefficient is not included here, since it will be normalized at the end of the day.    
+                self.state.gate(
+                    G=jump_op,
+                    where=osc_index + 1,
+                    inplace=True,
+                    contract=True
+                )
+                
+                self.state.normalize()
+                self.state.right_canonize()
+            
+            self.record_population(step)
+            
+    def record_population(self, step):
+        
+        # Conveniently obtain the reduced density matrix of the electronic part by utilizing the right-canonical property of the MPS
+        T = self.state[0].data
+        reduced_rho = T.T @ T.conj()
+        # Hopefully the shape of self.state[0].data would never be changed, otherwise try: reduced_rho = T @ T.conj().T
+        assert reduced_rho.shape == (self.nsites, self.nsites), "SEVERE Warning: The shape of reduced density matrix is incorrect!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        self.population[:, step] = reduced_rho.diagonal().real
+        
+        
+'''
+The class Totalsys_Rho_Fixed_Step consists of information of the total system, including:
+
+1. Parameters of the system (nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham)
+2. The total system density matrix in MPS form (rho), which is a 2D array of shape (nsites, nsites), with each element being an MPS (flattened MPO) representing the density matrices of the oscillators
+3. The population dynamics during time evolution (populations), which will be updated after each time step by tracing out the diagonal MPS elements, resulting in nsites numbers,
+
+as well as methods for fixed step time evolution, population update, and construction of various evolution gates:
+
+1. __init__: Initializes everything
+2. Time_Evolve_Rho_Fixed_Step: Time evolve the total system density matrix with the help of various gates
+3. update_populations: Update the population dynamics after each time step
+4. various gates (as illustrated below)
+'''
+
+class Totalsys_Rho_Fixed_Step:
+    
+    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham):
+        
+        thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
+        
+        # The zero_mps should be in the same structure as the thermal_mps, otherwise it will cause an error when adding two different-structured MPSs.
+        zero_mps = thermal_mps.copy()
+        for t in zero_mps.tensors:
+            t.modify(data=t.data*0)
+        
+        # All of the elements in the intial rho is zero_mps, except the top-left corner
+        self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
+        
+        # Population initialization
+        self.populations = np.zeros((nsites, int(time/timestep)))
+        
+        # Parameter information initialization
+        self.nsites = nsites
+        self.localDim = localDim
+        self.nosc = nosc
+        self.temps = temps
+        self.freqs = freqs
+        self.damps = damps
+        self.coups = coups
+        self.elham = elham
+        self.a = utils.annihilation_operator(localDim)
+        self.a_dagger = self.a.conj().T
+        self.N_operator = self.a_dagger @ self.a
+        self.N1_operator = self.a @ self.a_dagger
+        
+    def Time_Evolve_Rho_Fixed_Step(self, time, dt, max_bond_dim):
+        
+        '''
+        The Total system is described by three parts of Hamiltonian.
+        1. The electronic Hamiltonian (H_el):
+            H_el = sum_n E_n |n><n| + sum_{m!=n} J_{mn} |m><n|
+        2. The oscillator Hamiltonian (H_osc):
+            H_osc = sum_i omega_i (a_i^\dagger a_i + 1/2)
+        3. The interaction Hamiltonian (H_int):
+            H_int = sum_n sum_i (g_{n,i} |n><n| (a_i + a_i^\dagger))
+        with dissipators for each oscillator:
+            D_i(rho) = gamma_i (nbar_i + 1) (a_i rho a_i^\dagger - 1/2 {a_i^\dagger a_i, rho}) + gamma_i nbar_i (a_i^\dagger rho a_i - 1/2 {a_i a_i^\dagger, rho})
+        where nbar_i = 1/(exp(beta omega_i) - 1) is the thermal occupation number of the i-th oscillator.
+        
+        These three Hamiltonians will be used to calculate the commutator [H, rho], from which we can get the evolution superoperators for a small time step dt. These superoperators, together with the superoperators from the dissipators, will be used to time evolve the flattened density matrix in MPS form.
+        '''
+        
+        # Two evolution gates
+        osc_gates = self.get_osc_gates(dt/2)
+        int_gates = self.get_int_gates(dt/2)
+
+        # Electronic evolution Coefficients       
+        U_el = scipy.linalg.expm(-1j * dt * self.elham)
+        U_el_dagger = U_el.conj().T
+        
+        # Main time evolution loop (using 2nd order Trotter decomposition)
+        for step in tqdm(range(int(time/dt))):
+            
+            ns = self.nsites
+
+            # Oscillator part and interaction part evolution with dt/2
+            for i in range(ns):
+                for j in range(ns):
+                    if i <= j:
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(
+                            osc_gates,
+                            method='zipup',
+                            max_bond=max_bond_dim,
+                            cutoff=1e-8,
+                        )
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(
+                            int_gates[i][j],
+                            method='zipup',
+                            max_bond=max_bond_dim,
+                            cutoff=1e-8,
+                        )
+                    else:
+                        # Use the Hermitian property of the density matrix to reduce computation
+                        self.rho[i][j] = self.rho[j][i].conj()
+
+            self.rho = np.dot(U_el, np.dot(self.rho, U_el_dagger))
+            
+            # Interaction part and oscillator part evolution with dt/2
+            for i in range(ns):
+                for j in range(ns):
+                    if i <= j:
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(
+                            int_gates[i][j],
+                            method='zipup',
+                            max_bond=max_bond_dim,
+                            cutoff=1e-8,
+                        )
+                        self.rho[i][j] = self.rho[i][j].gate_with_mpo(
+                            osc_gates,
+                            method='zipup',
+                            max_bond=max_bond_dim,
+                            cutoff=1e-8,
+                        )
+                    else:
+                        # Use the Hermitian property of the density matrix to reduce computation
+                        self.rho[i][j] = self.rho[j][i].conj()
+            
+            self.update_populations(step, ns)
+            
+    def update_populations(self, step, ns):
+        
+        for n in range(ns):
+            self.populations[n][step] = utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real
+    
+    # The evolution gates of local oscillators are identical among all matrix elements (matrix elements refer to the elements in the total system density matrix), so we only return one MPO here.
+    def get_osc_gates(self, dt):
+        
+        local_ops = []
+        for i in range(self.nosc):
+            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim, self.N_operator) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim, self.a, self.a_dagger, self.N_operator, self.N1_operator)))
+        
+        # Combine local operators into an MPO, with bond dimensions of 1   
+        return qtn.MPO_product_operator(local_ops)
+    
+    # Conversely, the interaction gates are different among different matrix elements, so we return a 2D array of MPOs here.
+    
+    def get_int_gates(self, dt):
+        X = (self.a + self.a_dagger)              # shape (localDim, localDim)
+        X_t = X.T
+        ns = self.nsites
+        no = self.nosc
+        expm_minus = [[None]*no for _ in range(ns)]   # exp(-i dt g_m X)
+        expm_plus  = [[None]*no for _ in range(ns)]   # exp( i dt g_n X^T)
+        
+        for m in range(ns):
+            for i in range(no):
+                g = self.coups[m][i]
+                expm_minus[m][i] = scipy.linalg.expm(-1j * dt * g * X)
+                expm_plus[m][i]  = scipy.linalg.expm( 1j * dt * g * X_t)
+
+        int_gates = np.empty((ns, ns), dtype=object)
+        
+        for m in range(ns):
+            for n in range(ns):
+                local_ops = []
+                for i in range(no):
+                    local_ops.append(np.kron(expm_minus[m][i], expm_plus[n][i]))
+                int_gates[m][n] = qtn.MPO_product_operator(local_ops)
+                
+        return int_gates
+
+
+'''
+The class Totalsys_Rho_Adaptive_Step consists of information of the total system, including:
+
+1. Parameters of the system (self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array)
+>>>>>>> 94220de (Integrated Version)
 2. The total system density matrix in MPS form (rho), which is a 2D array of shape (nsites, nsites), with each element being an MPS (flattened MPO) representing the density matrices of the oscillators
 3. The population dynamics during time evolution (populations), which will be updated after each time step by tracing out the diagonal MPS elements, resulting in nsites numbers,
 
 as well as methods for time evolution, population update, and construction of various evolution gates:
 
 1. __init__: Initializes everything
+<<<<<<< HEAD
 2. Time_Evolve: Time evolve the total system density matrix with the help of various gates
 3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
 4. update_populations: Update the population dynamics after each time step
@@ -34,6 +377,17 @@ as well as methods for time evolution, population update, and construction of va
 class Totalsys_Rho:
     
     def __init__(self, nsites, noscpersite, nosc, localDim, temps, freqs, damps, coups, dt_array):
+=======
+2. Time_Evolve_Rho_Adaptive_Step: Time evolve the total system density matrix with the help of various gates
+3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
+4. update_populations: Update the population dynamics after each time step
+5. various gates (as illustrated below)
+'''
+
+class Totalsys_Rho_Adaptive_Step:
+    
+    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array):
+>>>>>>> 94220de (Integrated Version)
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -47,22 +401,37 @@ class Totalsys_Rho:
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]
+<<<<<<< HEAD
         # self.test_populations = np.zeros((nsites, int(config.time/config.timestep)))
         
         # Parameter information initialization
         self.nsites = nsites
         self.noscpersite = noscpersite
+=======
+        
+        # Parameter information initialization
+        self.nsites = nsites
+>>>>>>> 94220de (Integrated Version)
         self.localDim = localDim
         self.nosc = nosc
         self.temps = temps
         self.freqs = freqs
         self.damps = damps
         self.coups = coups
+<<<<<<< HEAD
         self.energies = config.energies
         self.exchange = config.exchange
         self.a = a
         self.a_dag = a_dag
         self.el_ham = self.exchange + np.diag(self.energies)
+=======
+        self.elham = elham
+        self.a = utils.annihilation_operator(localDim)
+        self.a_dagger = self.a.conj().T
+        self.N_operator = self.a_dagger @ self.a
+        self.N1_operator = self.a @ self.a_dagger
+        
+>>>>>>> 94220de (Integrated Version)
         self.dt_array = dt_array
         
         # Pre-construct various evolution gates for all possible discrete dt values in dt_array
@@ -76,7 +445,11 @@ class Totalsys_Rho:
         print("Electronic evolution operators constructed.")
 
         
+<<<<<<< HEAD
     def Time_Evolve(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
+=======
+    def Time_Evolve_Rho_Adaptive_Step(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
+>>>>>>> 94220de (Integrated Version)
         
         '''
         The Total system is described by three parts of Hamiltonian.
@@ -183,9 +556,14 @@ class Totalsys_Rho:
         int_gates = self.int_gates_dt_div_2[indicator][dt_index]
 
         # Electronic evolution Matrix
+<<<<<<< HEAD
         # U_el = scipy.linalg.expm(-1j * dt * self.el_ham)
         U_el = self.U_els_dt_div_1[indicator][dt_index]
         U_el_dag = U_el.conj().T
+=======
+        U_el = self.U_els_dt_div_1[indicator][dt_index]
+        U_el_dagger = U_el.conj().T
+>>>>>>> 94220de (Integrated Version)
         
         result_rho = rho
             
@@ -193,19 +571,39 @@ class Totalsys_Rho:
         for i in range(ns):
             for j in range(ns):
                 if i <= j:
+<<<<<<< HEAD
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
+=======
+                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(
+                        osc_gates,
+                        method='zipup',
+                        max_bond=max_bond_dim,
+                        cutoff=1e-8,
+                    )
+                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(
+                        int_gates[i][j],
+                        method='zipup',
+                        max_bond=max_bond_dim,
+                        cutoff=1e-8,
+                    )
+>>>>>>> 94220de (Integrated Version)
                 else:
                     # Use the Hermitian property of the density matrix to reduce computation
                     result_rho[i][j] = result_rho[j][i].conj()
 
         # Electronic part evolution
+<<<<<<< HEAD
         result_rho = np.dot(U_el, np.dot(result_rho, U_el_dag))
+=======
+        result_rho = np.dot(U_el, np.dot(result_rho, U_el_dagger))
+>>>>>>> 94220de (Integrated Version)
         
         # Interaction part and oscillator part evolution with dt/2
         for i in range(ns):
             for j in range(ns):
                 if i <= j:
+<<<<<<< HEAD
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(int_gates[i][j])
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(osc_gates)
                 else:
@@ -216,6 +614,23 @@ class Totalsys_Rho:
         for i in range(ns):
             for j in range(ns):
                 result_rho[i][j].compress(max_bond=max_bond_dim)
+=======
+                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(
+                        int_gates[i][j],
+                        method='zipup',
+                        max_bond=max_bond_dim,
+                        cutoff=1e-8,
+                    )
+                    result_rho[i][j] = result_rho[i][j].gate_with_mpo(
+                        osc_gates,
+                        method='zipup',
+                        max_bond=max_bond_dim,
+                        cutoff=1e-8,
+                    )
+                else:
+                    # Use the Hermitian property of the density matrix to reduce computation
+                    result_rho[i][j] = result_rho[j][i].conj()
+>>>>>>> 94220de (Integrated Version)
                 
         return result_rho
                 
@@ -225,7 +640,11 @@ class Totalsys_Rho:
         
         local_ops = []
         for i in range(self.nosc):
+<<<<<<< HEAD
             local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim)))
+=======
+            local_ops.append(scipy.linalg.expm(-1j * dt * utils.local_ham_osc(self.freqs[i], self.localDim, self.N_operator) + dt * self.damps[i] * utils.local_dissipator(self.freqs[i], self.temps[i], self.localDim, self.a, self.a_dagger, self.N_operator, self.N1_operator)))
+>>>>>>> 94220de (Integrated Version)
         
         # Combine local operators into an MPO, with bond dimensions of 1   
         return qtn.MPO_product_operator(local_ops)
@@ -233,6 +652,7 @@ class Totalsys_Rho:
     # Conversely, the interaction gates are different among different matrix elements, so we return a 2D array of MPOs here.
     def get_int_gates(self, dt):
         
+<<<<<<< HEAD
         int_gates = np.empty((self.nsites, self.nsites), dtype=object)
         for m in range(self.nsites):
             for n in range(self.nsites):
@@ -245,10 +665,36 @@ class Totalsys_Rho:
                 
                 # Combine local operators into an MPO, with bond dimensions of 1
                 int_gates[m][n] = qtn.MPO_product_operator(temporary_ops)
+=======
+        X = (self.a + self.a_dagger)              # shape (localDim, localDim)
+        X_t = X.T
+        ns = self.nsites
+        no = self.nosc
+        expm_minus = [[None]*no for _ in range(ns)]   # exp(-i dt g_m X)
+        expm_plus  = [[None]*no for _ in range(ns)]   # exp( i dt g_n X^T)
+        
+        for m in range(ns):
+            for i in range(no):
+                g = self.coups[m][i]
+                expm_minus[m][i] = scipy.linalg.expm(-1j * dt * g * X)
+                expm_plus[m][i]  = scipy.linalg.expm( 1j * dt * g * X_t)
+
+        int_gates = np.empty((ns, ns), dtype=object)
+        for m in range(ns):
+            for n in range(ns):
+                local_ops = []
+                for i in range(no):
+                    local_ops.append(np.kron(expm_minus[m][i], expm_plus[n][i]))
+                int_gates[m][n] = qtn.MPO_product_operator(local_ops)
+>>>>>>> 94220de (Integrated Version)
                 
         return int_gates
     
     # The electronic evolution operator is simply a matrix of complex numbers
     def get_U_els(self, dt):
         
+<<<<<<< HEAD
         return scipy.linalg.expm(-1j * dt * self.el_ham)
+=======
+        return scipy.linalg.expm(-1j * dt * self.elham)
+>>>>>>> 94220de (Integrated Version)
