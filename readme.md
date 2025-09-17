@@ -1,12 +1,20 @@
 # DAMPF_Final
 
-A Python project for quantum trajectory simulations and density matrix evolution. This repository provides several simulation examples and configuration files for different quantum system setups.
+A Python project for pure state QT (Quantum Trajectory) simulations and density matrix evolution. This repository provides several simulation examples and configuration files for different quantum system setups.
 
 ## Features
-- Pure quantum trajectory simulation
+- Pure state QT simulation
 - Density matrix evolution with fixed and adaptive steps
 - Configurable system parameters
 - Utility functions for analysis
+
+## File Overview
+- `Main_Simulation_Example1(Pure_QT).py`: Pure state QT simulation
+- `Main_Simulation_Example2(Rho_Fixed_Step).py`: Density matrix evolution with fixed step
+- `Main_Simulation_Example3(Rho_Adaptive_Step).py`: Density matrix evolution with adaptive step
+- `*_config.py`: Configuration files for each simulation type
+- `Totalsys_Class.py`: Main system class
+- `utils.py`: Utility functions
 
 ## Installation
 1. Clone the repository:
@@ -17,9 +25,9 @@ A Python project for quantum trajectory simulations and density matrix evolution
    ```powershell
    pip install -r requirements.txt
    ```
-   Note: The package kahypar is only supported on Linux, which is not required but recommended.
+   Don't worry if you find the kahypar package could not be installed, since it is only supported on Linux. This package is not required but recommended.
 
-## Usage
+## Examples
 Run one of the main simulation scripts depending on your needs:
 
 - **Pure Quantum Trajectory Simulation**
@@ -35,16 +43,16 @@ Run one of the main simulation scripts depending on your needs:
   python -u ".\Main_Simulation_Example3(Rho_Adaptive_Step).py"
   ```
 
-Configuration files (e.g., `Pure_QT_config.py`, `Rho_Fixed_Step_config.py`) can be edited to change simulation parameters.
+## Hints
+- Temperatures should be given in terms of nbar.
+- When representing the total system in terms of density matrix (Example2 and Example3), the total number of modes can not be 1, in which case there exists an error when doing MPS addition.
+- To achieve better performance, consider deleting all the prompting print statements in the code.
+- When using the QT Method, parallelization is highly recommended, but be aware that gates construction needs to be done separately as illustrated in the Example1.
+- The default parameters are in the configuration files, which can be modified as needed. Also, if you want to vary some of the parameters to automatically generate multiple sets of data, you can modify the input parameters of class definitions or time_evolution functions in the main simulation files.
 
-## File Overview
-- `Main_Simulation_Example1(Pure_QT).py`: Pure quantum trajectory simulation
-- `Main_Simulation_Example2(Rho_Fixed_Step).py`: Density matrix evolution with fixed step
-- `Main_Simulation_Example3(Rho_Adaptive_Step).py`: Density matrix evolution with adaptive step
-- `*_config.py`: Configuration files for each simulation type
-- `Totalsys_Class.py`: Main system class
-- `utils.py`: Utility functions
+
 
 ## Contact
 Author: Boyi Zheng
+
 Email: byding0574@gmail.com
