@@ -21,7 +21,8 @@ if __name__ == "__main__":
         coups=Rho_Fixed_Step_config.coups,
         time=Rho_Fixed_Step_config.time,
         timestep=Rho_Fixed_Step_config.timestep,
-        elham=Rho_Fixed_Step_config.elham
+        elham=Rho_Fixed_Step_config.elham,
+        el_initial_state=Rho_Fixed_Step_config.el_initial_state
     )   # Initialize the total system density matrix in MPS form
     
     Total_Rho.Time_Evolve_Rho_Fixed_Step(

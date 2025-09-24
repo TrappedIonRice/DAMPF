@@ -15,10 +15,11 @@ from tqdm import tqdm
 
 gates = {}
 
-def init_gates(onsite_gate, interaction_gates, on_site_non_unitary_gates):
-    gates['onsite'] = onsite_gate
-    gates['interaction'] = interaction_gates
-    gates['on_site_non_unitary'] = on_site_non_unitary_gates
+def init_gates(total_gates):
+    # gates['onsite'] = onsite_gate
+    # gates['interaction'] = interaction_gates
+    # gates['on_site_non_unitary'] = on_site_non_unitary_gates
+    gates['total_gates'] = total_gates
 
 
 '''
@@ -38,7 +39,7 @@ as well as methods for quantum trajectory time evolution and population update:
 
 class Totalsys_Pure:
     
-    def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state):
+    def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, el_initial_state, osc_state):
         
         # Parameter information initialization
         self.nsites = nsites
@@ -53,23 +54,34 @@ class Totalsys_Pure:
         self.a_dagger = self.a.conj().T
         
         # Gates initialization
-        self.onsite_gate = gates['onsite']
-        self.interaction_gates = gates['interaction']
-        self.on_site_non_unitary_gates = gates['on_site_non_unitary']
+        self.total_gates = gates['total_gates']
+        # self.onsite_gate = gates['onsite']
+        # self.interaction_gates = gates['interaction']
+        # self.on_site_non_unitary_gates = gates['on_site_non_unitary']
         
         # State initialization
-        self.initialize_state(osc_state, localDim)
+        self.el_initial_state = el_initial_state
+        self.initialize_state(osc_state)
         
         # Population initialization
         self.population = np.zeros((nsites, int(time/timestep)))
         
-    def initialize_state(self, osc_state, localDim):
+    def initialize_state(self, osc_state):
         
-        init_el_state = [np.eye(self.nsites)[0]] # initially the excitation is on site 0
-        init_osc_state = [np.eye(localDim)[excitation] for excitation in osc_state]
+        if np.abs(np.linalg.norm(self.el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
+            
+        self.el_initial_state = self.el_initial_state / np.linalg.norm(self.el_initial_state)
+        init_el_state = [self.el_initial_state]
+        # initially the excitation is on site 0
+        init_osc_state = [np.eye(self.localDim)[excitation] for excitation in osc_state]
         self.state = qtn.MPS_product_state(init_el_state + init_osc_state)
         
     def Time_Evolve_Pure_QT(self, dt, total_time, maxBondDim):
+        
+        # self.total_gates.show()
+        # print(self.total_gates)
+        # exit()
         
         nsteps = int(total_time/dt)
         
@@ -84,9 +96,9 @@ class Totalsys_Pure:
             delta_p2_i = gamma_i * nbar_i * <psi| (N_i + 1) |psi> * dt
             '''
             occupation_number = utils.calculate_occupation_number(self.state, self.nosc, self.a, self.a_dagger)
-            probobility_1 = self.damps * (1 + self.temps) * dt * occupation_number
-            probobility_2 = self.damps * self.temps * dt * (occupation_number + 1)
-            probability = np.concatenate((probobility_1, probobility_2))
+            probability_1 = self.damps * (1 + self.temps) * dt * occupation_number
+            probability_2 = self.damps * self.temps * dt * (occupation_number + 1)
+            probability = np.concatenate((probability_1, probability_2))
             delta_p = np.sum(probability)
             
             # Add another option for no jump
@@ -102,9 +114,9 @@ class Totalsys_Pure:
             
             # No jump case
             if sample == -1:
-            
+                
                 self.state.gate_with_mpo(
-                    self.onsite_gate,
+                    self.total_gates,
                     method='zipup',
                     max_bond=maxBondDim,
                     cutoff=1e-8,
@@ -112,31 +124,60 @@ class Totalsys_Pure:
                     normalize=True,
                     inplace=True
                 )
+            
+                # self.state.gate_with_mpo(
+                #     self.onsite_gate,
+                #     method='zipup',
+                #     max_bond=maxBondDim,
+                #     cutoff=1e-8,
+                #     canonize=True,
+                #     normalize=True,
+                #     inplace=True
+                # )
                 
-                for gate in self.interaction_gates:
+                # for gate in self.interaction_gates:
                                     
-                    self.state.gate_with_submpo(
-                        gate,
-                        method='zipup',
-                        max_bond=maxBondDim,
-                        cutoff=1e-8,
-                        canonize=True,
-                        normalize=True,
-                        inplace=True
-                    )
+                #     self.state.gate_with_submpo(
+                #         gate,
+                #         method='zipup',
+                #         max_bond=maxBondDim,
+                #         cutoff=1e-8,
+                #         canonize=True,
+                #         normalize=True,
+                #         inplace=True
+                #     )
                 
-                # In the non-jump case, we also need to apply the non-unitary gates to account for the non-Hermitian part of the effective Hamiltonian
-                for i,gate in enumerate(self.on_site_non_unitary_gates):
+                # # In the non-jump case, we also need to apply the non-unitary gates to account for the non-Hermitian part of the effective Hamiltonian
+                # for i,gate in enumerate(self.on_site_non_unitary_gates):
                     
-                    self.state.gate(
-                        G=gate,
-                        where=i+1,
-                        inplace=True,
-                        contract=True
-                    )
+                #     self.state.gate(
+                #         G=gate,
+                #         where=i+1,
+                #         inplace=True,
+                #         contract=True
+                #     )
                     
-                self.state.normalize()
-                self.state.right_canonize() 
+                # for gate in self.interaction_gates:
+                                    
+                #     self.state.gate_with_submpo(
+                #         gate,
+                #         method='zipup',
+                #         max_bond=maxBondDim,
+                #         cutoff=1e-8,
+                #         canonize=True,
+                #         normalize=True,
+                #         inplace=True
+                #     )
+                    
+                # self.state.gate_with_mpo(
+                #     self.onsite_gate,
+                #     method='zipup',
+                #     max_bond=maxBondDim,
+                #     cutoff=1e-8,
+                #     canonize=True,
+                #     normalize=True,
+                #     inplace=True
+                # )
                  
             # Jump case
             else:
@@ -189,7 +230,7 @@ as well as methods for fixed step time evolution, population update, and constru
 
 class Totalsys_Rho_Fixed_Step:
     
-    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham):
+    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham, el_initial_state):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -197,9 +238,14 @@ class Totalsys_Rho_Fixed_Step:
         zero_mps = thermal_mps.copy()
         for t in zero_mps.tensors:
             t.modify(data=t.data*0)
+            
+        if np.abs(np.linalg.norm(el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
         
-        # All of the elements in the intial rho is zero_mps, except the top-left corner
-        self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
+        self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
+        
+        # Construct the initial density matrix rho
+        self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
         # Population initialization
         self.populations = np.zeros((nsites, int(time/timestep)))
@@ -353,7 +399,7 @@ as well as methods for time evolution, population update, and construction of va
 
 class Totalsys_Rho_Adaptive_Step:
     
-    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array):
+    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array, el_initial_state):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -362,8 +408,13 @@ class Totalsys_Rho_Adaptive_Step:
         for t in zero_mps.tensors:
             t.modify(data=t.data*0)
         
-        # All of the elements in the intial rho is zero_mps, except the top-left corner
-        self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
+        if np.abs(np.linalg.norm(el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
+        
+        self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
+        
+        # Construct the initial density matrix rho
+        self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]

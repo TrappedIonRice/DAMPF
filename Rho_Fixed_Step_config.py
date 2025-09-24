@@ -18,6 +18,12 @@ timestep = 0.2             # integration time-step
 time = 200                 # total simulation time
 
 # -----------------------------------------------
+# Initial states
+# -----------------------------------------------
+
+el_initial_state = np.array([1, 0], dtype=complex)  # initial electronic state, in the site basis
+
+# -----------------------------------------------
 # Parameters for system dynamics
 # -----------------------------------------------
 
@@ -47,6 +53,8 @@ if __name__ == "__main__":
     print("maxBondDim =", maxBondDim)
     print("timestep =", timestep)
     print("time =", time)
+    print()
+    print("el_initial_state =", el_initial_state)
     print()
     print("elham =\n", elham)
     print("freqs =", freqs)

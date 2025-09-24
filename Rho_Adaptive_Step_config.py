@@ -15,6 +15,11 @@ nosc = 2                    # total number of oscillators
 localDim = 10               # local dimension of oscillators
 maxBondDim = 10             # maximal bond dimension of MPS
 
+# -----------------------------------------------
+# Initial states
+# -----------------------------------------------
+
+el_initial_state = np.array([1, 0], dtype=complex)  # initial electronic state, in the site basis
 
 # -----------------------------------------------
 # Parameters for time evolution
@@ -56,6 +61,8 @@ if __name__ == "__main__":
     print("nosc =", nosc)
     print("localDim =", localDim)
     print("maxBondDim =", maxBondDim)
+    print()
+    print("el_initial_state =", el_initial_state)
     print()
     print("initial_dt =", initial_dt)
     print("time =", time)
