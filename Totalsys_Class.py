@@ -15,10 +15,11 @@ from tqdm import tqdm
 
 gates = {}
 
-def init_gates(onsite_gate, interaction_gates, on_site_non_unitary_gates):
-    gates['onsite'] = onsite_gate
-    gates['interaction'] = interaction_gates
-    gates['on_site_non_unitary'] = on_site_non_unitary_gates
+def init_gates(total_gates):
+    # gates['onsite'] = onsite_gate
+    # gates['interaction'] = interaction_gates
+    # gates['on_site_non_unitary'] = on_site_non_unitary_gates
+    gates['total_gates'] = total_gates
 
 
 '''
@@ -38,7 +39,7 @@ as well as methods for quantum trajectory time evolution and population update:
 
 class Totalsys_Pure:
     
-    def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state):
+    def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, el_initial_state, osc_state, additional_osc_jump_op_dic={}, additional_osc_output_dic={}):
         
         # Parameter information initialization
         self.nsites = nsites
@@ -53,20 +54,53 @@ class Totalsys_Pure:
         self.a_dagger = self.a.conj().T
         
         # Gates initialization
-        self.onsite_gate = gates['onsite']
-        self.interaction_gates = gates['interaction']
-        self.on_site_non_unitary_gates = gates['on_site_non_unitary']
+        self.total_gates = gates['total_gates']
+        # self.onsite_gate = gates['onsite']
+        # self.interaction_gates = gates['interaction']
+        # self.on_site_non_unitary_gates = gates['on_site_non_unitary']
         
         # State initialization
-        self.initialize_state(osc_state, localDim)
+        self.el_initial_state = el_initial_state
+        self.initialize_state(osc_state)
         
         # Population initialization
-        self.population = np.zeros((nsites, int(time/timestep)))
+        self.results = {
+            "reduced_density_matrix": np.zeros((nsites, nsites, int(time/timestep)), dtype=complex),
+            "additional_osc_output": np.array([np.zeros(int(time/timestep), dtype=complex) for _ in range(len(additional_osc_output_dic))])
+        }
         
-    def initialize_state(self, osc_state, localDim):
+        # Additional Requirements initialization
+        self.additional_osc_jump_op_dic = additional_osc_jump_op_dic
+        self.additional_osc_output_dic = additional_osc_output_dic
         
-        init_el_state = [np.eye(self.nsites)[0]] # initially the excitation is on site 0
-        init_osc_state = [np.eye(localDim)[excitation] for excitation in osc_state]
+        # --- performance caches for repeated expectation calls (precompute terms) ---
+        # occupation terms for compute_local_expectation_canonical:
+        # keys are (site_index,) where oscillator sites are indexed from 1..nosc in your code
+        self._occupation_terms = {(i,): self.a_dagger @ self.a for i in range(1, self.nosc + 1)}
+
+        # additional jumps/outputs: create ordered lists and precompute terms used for expectation/probability
+        self._additional_keys = []
+        self._additional_ops = []
+        self._additional_prob_terms = {}        # for probabilities: op^† op
+        self._additional_expectation_terms = {} # for expectation: op
+        for key, op in additional_osc_jump_op_dic.items():
+            ik = int(key)                       # ensure integer site index
+            self._additional_keys.append(ik)
+            self._additional_ops.append(op)
+            self._additional_prob_terms[(ik,)] = op.conj().T @ op
+            self._additional_expectation_terms[(ik,)] = op
+
+        self._n_additional = len(self._additional_keys)
+
+        
+    def initialize_state(self, osc_state):
+        
+        if np.abs(np.linalg.norm(self.el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
+            
+        self.el_initial_state = self.el_initial_state / np.linalg.norm(self.el_initial_state)
+        init_el_state = [self.el_initial_state]
+        init_osc_state = [np.eye(self.localDim)[excitation] for excitation in osc_state]
         self.state = qtn.MPS_product_state(init_el_state + init_osc_state)
         
     def Time_Evolve_Pure_QT(self, dt, total_time, maxBondDim):
@@ -83,28 +117,26 @@ class Totalsys_Pure:
             delta_p1_i = gamma_i * (nbar_i + 1) * <psi| N_i |psi> * dt
             delta_p2_i = gamma_i * nbar_i * <psi| (N_i + 1) |psi> * dt
             '''
-            occupation_number = utils.calculate_occupation_number(self.state, self.nosc, self.a, self.a_dagger)
-            probobility_1 = self.damps * (1 + self.temps) * dt * occupation_number
-            probobility_2 = self.damps * self.temps * dt * (occupation_number + 1)
-            probability = np.concatenate((probobility_1, probobility_2))
-            delta_p = np.sum(probability)
+            occ_dict = self.state.compute_local_expectation_canonical(terms=self._occupation_terms, return_all=True)
+            # occ_dict is a dict keyed by (i,) in ascending order of the keys in self._occupation_terms
+            occupation_number = np.array(list(occ_dict.values())).real    # shape (nosc,)
+            probability_1 = self.damps * (1 + self.temps) * dt * occupation_number
+            probability_2 = self.damps * self.temps * dt * (occupation_number + 1)
+            if self._n_additional > 0:
+                addp_dict = self.state.compute_local_expectation_canonical(terms=self._additional_prob_terms, return_all=True)
+                probability_3 = dt * np.array(list(addp_dict.values())).real
+            else:
+                probability_3 = np.array([])
+                
+            probability = np.hstack((probability_1, probability_2, probability_3))
+            delta_p = probability.sum()
             
-            # Add another option for no jump
-            probs = np.append(probability, 1 - delta_p)
-            choices = list(range(len(probability))) + [-1]
-            
-            try:
-                sample = np.random.choice(choices, p=probs)
-            except ValueError:
-                print("Something wrong happened when sampling the jump operators!")
-                print("Probabilities:", probs)
-                print("Sum of probabilities:", np.sum(probs))
-            
-            # No jump case
-            if sample == -1:
-            
+            # --- sampling optimized: first test no-jump quickly ---
+            u = np.random.rand()
+            if u > delta_p:
+                # no-jump
                 self.state.gate_with_mpo(
-                    self.onsite_gate,
+                    self.total_gates,
                     method='zipup',
                     max_bond=maxBondDim,
                     cutoff=1e-8,
@@ -112,64 +144,60 @@ class Totalsys_Pure:
                     normalize=True,
                     inplace=True
                 )
-                
-                for gate in self.interaction_gates:
-                                    
-                    self.state.gate_with_submpo(
-                        gate,
-                        method='zipup',
-                        max_bond=maxBondDim,
-                        cutoff=1e-8,
-                        canonize=True,
-                        normalize=True,
-                        inplace=True
-                    )
-                
-                # In the non-jump case, we also need to apply the non-unitary gates to account for the non-Hermitian part of the effective Hamiltonian
-                for i,gate in enumerate(self.on_site_non_unitary_gates):
-                    
+            else:
+                # there is a jump — pick which one via cumulative-sum search
+                r = np.random.rand() * delta_p
+                cum = np.cumsum(probability)
+                idx = int(np.searchsorted(cum, r, side='right'))  # index in [0, len(probability)-1]
+
+                if idx < 2 * self.nosc:
+                    # standard oscillator a or a^\dagger jump
+                    osc_index = idx % self.nosc
+                    jump_type = idx // self.nosc  # 0 for a, 1 for a_dagger
+                    jump_op = self.a if jump_type == 0 else self.a_dagger
+
                     self.state.gate(
-                        G=gate,
-                        where=i+1,
+                        G=jump_op,
+                        where=osc_index + 1,
                         inplace=True,
                         contract=True
                     )
-                    
-                self.state.normalize()
-                self.state.right_canonize() 
-                 
-            # Jump case
-            else:
-                
-                osc_index = sample % self.nosc
-                jump_type = sample // self.nosc    # 0 for a, 1 for a_dagger
-                
-                if jump_type == 0:
-                    jump_op = self.a
+                    self.state.normalize()
+                    self.state.right_canonize()
                 else:
-                    jump_op = self.a_dagger
-                
-                # The coefficient is not included here, since it will be normalized at the end of the day.    
-                self.state.gate(
-                    G=jump_op,
-                    where=osc_index + 1,
-                    inplace=True,
-                    contract=True
-                )
-                
-                self.state.normalize()
-                self.state.right_canonize()
+                    # additional jump: use precomputed keys/ops lists
+                    add_index = idx - 2 * self.nosc
+                    osc_index = int(self._additional_keys[add_index])
+                    jump_op = self._additional_ops[add_index]
+
+                    self.state.gate(
+                        G=jump_op,
+                        where=osc_index,
+                        inplace=True,
+                        contract=True
+                    )
+                    self.state.normalize()
+                    self.state.right_canonize()
+
+            # record results as before
+            self.record_results(step)
             
-            self.record_population(step)
-            
-    def record_population(self, step):
-        
-        # Conveniently obtain the reduced density matrix of the electronic part by utilizing the right-canonical property of the MPS
+    def record_results(self, step):
+
+        # electronic reduced density matrix
         T = self.state[0].data
         reduced_rho = T.T @ T.conj()
-        # Hopefully the shape of self.state[0].data would never be changed, otherwise try: reduced_rho = T @ T.conj().T
-        assert reduced_rho.shape == (self.nsites, self.nsites), "SEVERE Warning: The shape of reduced density matrix is incorrect!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        self.population[:, step] = reduced_rho.diagonal().real
+        assert reduced_rho.shape == (self.nsites, self.nsites), "Reduced density matrix shape error!"
+        self.results["reduced_density_matrix"][:, :, step] = reduced_rho
+
+        # additional outputs (use precomputed expectation terms to avoid rebuilding dicts)
+        if self._n_additional > 0:
+            add_expect = self.state.compute_local_expectation_canonical(terms=self._additional_expectation_terms, return_all=True)
+            self.results["additional_osc_output"][:, step] = np.array(list(add_expect.values())).real
+        else:
+            # nothing to do (already initialized)
+            pass
+
         
         
 '''
@@ -189,7 +217,7 @@ as well as methods for fixed step time evolution, population update, and constru
 
 class Totalsys_Rho_Fixed_Step:
     
-    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham):
+    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham, el_initial_state):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -197,9 +225,14 @@ class Totalsys_Rho_Fixed_Step:
         zero_mps = thermal_mps.copy()
         for t in zero_mps.tensors:
             t.modify(data=t.data*0)
+            
+        if np.abs(np.linalg.norm(el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
         
-        # All of the elements in the intial rho is zero_mps, except the top-left corner
-        self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
+        self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
+        
+        # Construct the initial density matrix rho
+        self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
         # Population initialization
         self.populations = np.zeros((nsites, int(time/timestep)))
@@ -353,7 +386,7 @@ as well as methods for time evolution, population update, and construction of va
 
 class Totalsys_Rho_Adaptive_Step:
     
-    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array):
+    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array, el_initial_state):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -362,8 +395,13 @@ class Totalsys_Rho_Adaptive_Step:
         for t in zero_mps.tensors:
             t.modify(data=t.data*0)
         
-        # All of the elements in the intial rho is zero_mps, except the top-left corner
-        self.rho = [[thermal_mps if (i==0) and (j==0) else zero_mps for i in range(nsites)] for j in range(nsites)]
+        if np.abs(np.linalg.norm(el_initial_state) - 1) > 1e-6:
+            print("The electronic initial state is not normalized! Using the normalized state vector instead")
+        
+        self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
+        
+        # Construct the initial density matrix rho
+        self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
         # Population initialization
         self.populations = [[] for _ in range(nsites)]

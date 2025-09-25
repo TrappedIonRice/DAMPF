@@ -20,7 +20,8 @@ if __name__ == "__main__":
         freqs=Rho_Adaptive_Step_config.freqs,
         damps=Rho_Adaptive_Step_config.damps,
         coups=Rho_Adaptive_Step_config.coups,
-        dt_array=Rho_Adaptive_Step_config.dt_array
+        dt_array=Rho_Adaptive_Step_config.dt_array,
+        el_initial_state=Rho_Adaptive_Step_config.el_initial_state
     )   # Initialize the total system density matrix in MPS form
     
     Time = Total_Rho.Time_Evolve_Rho_Adaptive_Step(
