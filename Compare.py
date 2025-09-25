@@ -29,11 +29,13 @@ def worker(osc_state):
         time=Pure_QT_config.time,
         timestep=Pure_QT_config.timestep,
         el_initial_state=Pure_QT_config.el_initial_state,
-        osc_state=osc_state
+        osc_state=osc_state,
+        additional_osc_jump_op_dic=Pure_QT_config.additional_osc_jump_op_dic,
+        additional_osc_output_dic=Pure_QT_config.additional_osc_output_dic,
     )
     trial_state.Time_Evolve_Pure_QT(Pure_QT_config.timestep, Pure_QT_config.time, Pure_QT_config.maxBondDim)
     print("A trajectory ended")
-    return trial_state.population
+    return trial_state.results
 
 
 if __name__ == "__main__":
@@ -43,7 +45,7 @@ if __name__ == "__main__":
     osc_state_nparray = utils.create_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, Pure_QT_config.localDim, Pure_QT_config.temps)
     osc_state_array = list(osc_state_nparray)
     
-    ave_population = np.zeros((Pure_QT_config.nsites, int(Pure_QT_config.time / Pure_QT_config.timestep)))
+    ave_reduced_density_matrix = np.zeros((Pure_QT_config.nsites, Pure_QT_config.nsites, int(Pure_QT_config.time / Pure_QT_config.timestep)), dtype=complex)
     
     print("Constructing gates...")
     # Unlike other examples, these evolution gates need to be pre-constructed so that they can be shared across multiple processes.
@@ -73,8 +75,8 @@ if __name__ == "__main__":
         print(f"Pool created in {time.time() - t} seconds")
         t = time.time()
         print("Simulation started, timing...")
-        for pop_arr in pool.imap(worker, osc_state_array):
-            ave_population += pop_arr / Pure_QT_config.Ntraj
+        for result in pool.imap(worker, osc_state_array):
+            ave_reduced_density_matrix += result["reduced_density_matrix"] / Pure_QT_config.Ntraj
             gc.collect()
             
     print(f"Total time consumed for simulation: {time.time() - t} seconds")
@@ -83,8 +85,8 @@ if __name__ == "__main__":
     # Plot the averaged population dynamics after time evolution
     Time = np.arange(0, Pure_QT_config.time, Pure_QT_config.timestep)
     for site in range(Pure_QT_config.nsites):
-        plt.plot(Time, ave_population[site], label=f'Site {site}')        
-    plt.plot(Time, np.sum(ave_population, axis=0), label='Total')
+        plt.plot(Time, ave_reduced_density_matrix[site][site].real, label=f'Site {site}')
+    plt.plot(Time, np.trace(ave_reduced_density_matrix, axis1=0, axis2=1).real, label='Total')
     
     
     

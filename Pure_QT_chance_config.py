@@ -48,6 +48,22 @@ damps = np.array([0.05, 0.05, 0.05, 0.05, 0.05])
 elham = np.diag(energies) + np.diag([exchange_per_site]*(nsites-1), k=1) + np.diag([exchange_per_site]*(nsites-1), k=-1)    # exchange matrix
 
 # -----------------------------------------------
+# Additional jump operators and outputs
+# -----------------------------------------------
+
+N_operator = np.diag(np.arange(localDim))  # number operator for oscillators
+
+additional_osc_jump_op_dic = {
+    "1": np.sqrt(0.005) * N_operator,
+    "2": np.sqrt(0.005) * N_operator,
+}
+additional_osc_output_dic = {
+    "1": N_operator,
+    "2": N_operator,
+}
+# The index represents the oscillator index, which starts from 1
+
+# -----------------------------------------------
 # Print out all parameters
 # -----------------------------------------------
 
@@ -59,10 +75,13 @@ if __name__ == "__main__":
     print("timestep =", timestep)
     print("time =", time)
     print()
-    print("el_initial_state =", el_initial_state)
+    print("el_initial_state =\n", el_initial_state)
     print()
-    print("elham =", elham)
+    print("elham =\n", elham)
     print("freqs =", freqs)
     print("temps =", temps)
-    print("coups =", coups)
+    print("coups =\n", coups)
     print("damps =", damps)
+    print()
+    print("additional_osc_jump_op_dic =\n", additional_osc_jump_op_dic)
+    print("additional_osc_output_dic =\n", additional_osc_output_dic)

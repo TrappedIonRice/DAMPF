@@ -172,7 +172,7 @@ def construct_all_gates(nsites, elham, nosc, freqs, coups, temps, damps, localDi
 # Calculate the occupation number of each oscillator given the current state
 def calculate_occupation_number(state, nosc, a, a_dagger):
     
-    occupation_number = np.zeros(nosc)
+    occupation_number = np.zeros(nosc, dtype=complex)
     N_operator = a_dagger @ a
     
     terms = {(i,): N_operator for i in range(1, nosc + 1)}
@@ -181,6 +181,28 @@ def calculate_occupation_number(state, nosc, a, a_dagger):
     occupation_number_nparray = np.array(list(occupation_number.values()))
     # print(occupation_number_nparray)
     return occupation_number_nparray.real
+
+def calculate_additional_probabilities(state, additional_output_dic):
+    
+    if len(additional_output_dic) == 0:
+        return np.array([])
+    
+    terms = {tuple([int(key)]): op.conj().T @ op for key, op in additional_output_dic.items()}
+    # Attention: the use of compute_local_expectation_canonical (which is more efficient than calculating expectation values one by one) requires the MPS to be properly canonicalized, and one of the feasible canonical form is complete right-canonical form.
+    additional_probabilities = state.compute_local_expectation_canonical(terms=terms, return_all=True)
+    
+    return np.array(list(additional_probabilities.values())).real
+    
+def calculate_additional_expectation(state, additional_output_dic):
+    
+    if len(additional_output_dic) == 0:
+        return np.array([])
+    
+    terms = {tuple([int(key)]): op for key, op in additional_output_dic.items()}
+    # Attention: the use of compute_local_expectation_canonical (which is more efficient than calculating expectation values one by one) requires the MPS to be properly canonicalized, and one of the feasible canonical form is complete right-canonical form.
+    additional_expectation = state.compute_local_expectation_canonical(terms=terms, return_all=True)
+    
+    return np.array(list(additional_expectation.values())).real
 
 # Create initial thermal state as the initial state for the density matrix methods
 def create_thermal_mps(nosc, localDim, temps, freqs):
@@ -213,15 +235,24 @@ def create_thermal_mps(nosc, localDim, temps, freqs):
 
 # The trace of an MPS (sitewisely flattened MPO) cannot be calculated directly using the built-in function in quimb, so we define our own function here.
 # We are calculating the trace by contracting the MPS with a series of identical vectors that pick out the diagonal elements.
-def trace_MPS(mps, nosc, localDim):
-    
-    trace_vec = np.zeros(localDim**2, dtype=complex)
-    trace_vec[::localDim+1] = 1    # set diagonal elements to 1
-    trace_vectors = [trace_vec for _ in range(nosc)]
-    trace_assistant = qtn.MPS_product_state(trace_vectors)
+# module-level cache
+_TRACE_MPS_CACHE = {}
 
-    # Contract the MPS with the trace assistant MPS
+def trace_MPS(mps, nosc, localDim):
+    global _TRACE_MPS_CACHE
+    cache_key = (nosc, localDim)
+    if cache_key in _TRACE_MPS_CACHE:
+        trace_assistant = _TRACE_MPS_CACHE[cache_key]
+    else:
+        trace_vec = np.zeros(localDim**2, dtype=complex)
+        trace_vec[::localDim+1] = 1
+        trace_vectors = [trace_vec for _ in range(nosc)]
+        trace_assistant = qtn.MPS_product_state(trace_vectors)
+        _TRACE_MPS_CACHE[cache_key] = trace_assistant
+
+    # Contract the MPS with the trace assistant (no need to rebuild the assistant each call)
     return complex(trace_assistant @ mps)
+
     
 # Utility functions to construct local Hamiltonian
 def local_ham_osc(omega, localDim, N_operator):
