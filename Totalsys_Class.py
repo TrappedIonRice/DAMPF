@@ -25,7 +25,7 @@ def init_gates(onsite_gate, interaction_gates, on_site_non_unitary_gates):
 The class Totalsys_Pure consists of information of the total system, including:
 
 1. Parameters of the system (nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state)
-2. The total system pure state in MPS form, which consists of a spin site at the very left and nosc oscillator sites following it.
+2. The total system pure state in MPS form, which consists of a spin site with nsite states at the very left and nosc oscillator sites following it.
 3. The population dynamics during time evolution (population), which will be updated after each time step by calculating the diagonal elements of the reduced density matrix of the electronic part, resulting in nsites numbers.
 
 as well as methods for quantum trajectory time evolution and population update:
