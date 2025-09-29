@@ -15,7 +15,7 @@ Ntraj = 500                # number of trajectories to average over
 nsites = 4                 # number of sites
 nosc = 1                   # total number of oscillators
 localDim = 10              # local dimension of oscillators
-maxBondDim = 10            # maximal bond dimension of MPS
+maxBondDim = 40            # maximal bond dimension of MPS
 timestep = 0.5             # integration time-step
 time = 50*3.1415926*2      # total simulation time
 
