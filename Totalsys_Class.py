@@ -41,6 +41,8 @@ class Totalsys_Pure:
     
     def __init__(self, nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, el_initial_state, osc_state, additional_osc_jump_op_dic={}, additional_osc_output_dic={}):
         
+        self.maxbond_throughout_whole_evolution = 1
+        
         # Parameter information initialization
         self.nsites = nsites
         self.nosc = nosc
@@ -79,18 +81,27 @@ class Totalsys_Pure:
         self._occupation_terms = {(i,): self.a_dagger @ self.a for i in range(1, self.nosc + 1)}
 
         # additional jumps/outputs: create ordered lists and precompute terms used for expectation/probability
-        self._additional_keys = []
-        self._additional_ops = []
-        self._additional_prob_terms = {}        # for probabilities: op^† op
-        self._additional_expectation_terms = {} # for expectation: op
+        self._additional_keys_jump = []
+        self._additional_ops_jump = []
+        self._additional_prob_terms_jump = {}        # for probabilities: op^† op
+        self._additional_keys_output = []
+        self._additional_ops_output = []
+        self._additional_expectation_terms_output = {} # for expectation: op
         for key, op in additional_osc_jump_op_dic.items():
             ik = int(key)                       # ensure integer site index
-            self._additional_keys.append(ik)
-            self._additional_ops.append(op)
-            self._additional_prob_terms[(ik,)] = op.conj().T @ op
-            self._additional_expectation_terms[(ik,)] = op
+            self._additional_keys_jump.append(ik)
+            self._additional_ops_jump.append(op)
+            self._additional_prob_terms_jump[(ik,)] = op.conj().T @ op
+            
+        for key, op in additional_osc_output_dic.items():
+            ik = int(key)                       # ensure integer site index
+            self._additional_keys_output.append(ik)
+            self._additional_ops_output.append(op)
+            self._additional_expectation_terms_output[(ik,)] = op
 
-        self._n_additional = len(self._additional_keys)
+        self._n_additional_jump = len(self._additional_keys_jump)
+        self._n_additional_output = len(self._additional_keys_output)
+        
 
         
     def initialize_state(self, osc_state):
@@ -122,8 +133,8 @@ class Totalsys_Pure:
             occupation_number = np.array(list(occ_dict.values())).real    # shape (nosc,)
             probability_1 = self.damps * (1 + self.temps) * dt * occupation_number
             probability_2 = self.damps * self.temps * dt * (occupation_number + 1)
-            if self._n_additional > 0:
-                addp_dict = self.state.compute_local_expectation_canonical(terms=self._additional_prob_terms, return_all=True)
+            if self._n_additional_jump > 0:
+                addp_dict = self.state.compute_local_expectation_canonical(terms=self._additional_prob_terms_jump, return_all=True)
                 probability_3 = dt * np.array(list(addp_dict.values())).real
             else:
                 probability_3 = np.array([])
@@ -167,8 +178,8 @@ class Totalsys_Pure:
                 else:
                     # additional jump: use precomputed keys/ops lists
                     add_index = idx - 2 * self.nosc
-                    osc_index = int(self._additional_keys[add_index])
-                    jump_op = self._additional_ops[add_index]
+                    osc_index = int(self._additional_keys_jump[add_index])
+                    jump_op = self._additional_ops_jump[add_index]
 
                     self.state.gate(
                         G=jump_op,
@@ -182,6 +193,9 @@ class Totalsys_Pure:
             # record results as before
             self.record_results(step)
             
+            if self.state.max_bond() > self.maxbond_throughout_whole_evolution:
+                self.maxbond_throughout_whole_evolution = self.state.max_bond()
+            
     def record_results(self, step):
 
         # electronic reduced density matrix
@@ -191,8 +205,8 @@ class Totalsys_Pure:
         self.results["reduced_density_matrix"][:, :, step] = reduced_rho
 
         # additional outputs (use precomputed expectation terms to avoid rebuilding dicts)
-        if self._n_additional > 0:
-            add_expect = self.state.compute_local_expectation_canonical(terms=self._additional_expectation_terms, return_all=True)
+        if self._n_additional_output > 0:
+            add_expect = self.state.compute_local_expectation_canonical(terms=self._additional_expectation_terms_output, return_all=True)
             self.results["additional_osc_output"][:, step] = np.array(list(add_expect.values())).real
         else:
             # nothing to do (already initialized)

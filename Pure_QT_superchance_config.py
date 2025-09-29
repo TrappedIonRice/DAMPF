@@ -10,11 +10,11 @@ import numpy as np
 # -----------------------------------------------
 # Basic system parameters
 # -----------------------------------------------
-Ntraj = 570                # number of trajectories to average over
-nsites = 10                 # number of sites
-nosc = 10                   # total number of oscillators
+Ntraj = 1                  # number of trajectories to average over
+nsites = 10                # number of sites
+nosc = 10                  # total number of oscillators
 localDim = 10              # local dimension of oscillators
-maxBondDim = 20            # maximal bond dimension of MPS
+maxBondDim = 10            # maximal bond dimension of MPS
 timestep = 0.1             # integration time-step
 time = 200                 # total simulation time
 
