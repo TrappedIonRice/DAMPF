@@ -99,7 +99,7 @@ def run_simulation(current_localDim):
     """
     print(f"\n{'='*20} Starting Simulation for localDim = {current_localDim} {'='*20}")
     
-    osc_state_nparray = utils.create_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, current_localDim, Pure_QT_config.temps)
+    osc_state_nparray = utils.create_thermal_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, current_localDim, Pure_QT_config.temps)
     osc_state_array = list(osc_state_nparray)
 
     print("Constructing gates...")

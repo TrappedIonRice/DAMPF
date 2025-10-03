@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     # Prepare an array of initial oscillator states for all trajectories
     # osc_state_array = np.array([np.array([0]*Pure_QT_config.nosc) for _ in range(Pure_QT_config.Ntraj)]) # Use this line for zero-temperature initial states
-    osc_state_nparray = utils.create_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, Pure_QT_config.localDim, Pure_QT_config.temps)
+    osc_state_nparray = utils.create_thermal_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, Pure_QT_config.localDim, Pure_QT_config.temps)
     osc_state_array = list(osc_state_nparray)
     
     ave_reduced_density_matrix = np.zeros((Pure_QT_config.nsites, Pure_QT_config.nsites, int(Pure_QT_config.time / Pure_QT_config.timestep)), dtype=complex)

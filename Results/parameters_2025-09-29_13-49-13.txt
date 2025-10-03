@@ -1,0 +1,31 @@
+Ntraj = 1000
+nsites = 4
+nosc = 1
+localDim_array = [5, 10, 15]
+maxBondDim = 10
+timestep = 0.1
+time = 314.15926
+
+el_initial_state =
+[0.70710678+0.j 0.70710678+0.j 0.        +0.j 0.        +0.j]
+
+elham =
+[[ 1.5     0.03    0.0075  0.006 ]
+ [ 0.03    1.5     0.01    0.0075]
+ [ 0.0075  0.01   -1.5     0.03  ]
+ [ 0.006   0.0075  0.03   -1.5   ]]
+freqs = [1]
+temps = [0.01]
+coups =
+[[ 0.5]
+ [ 0.5]
+ [-0.5]
+ [-0.5]]
+damps =
+[0.015]
+
+additional_osc_jump_op_dic =
+{}
+
+additional_osc_output_dic =
+{}

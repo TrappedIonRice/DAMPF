@@ -1,0 +1,35 @@
+Ntraj = 1000
+nsites = 5
+nosc = 5
+localDim = 10
+maxBondDim = 20
+timestep = 0.1
+time = 200
+
+el_initial_state =
+[1.+0.j 0.+0.j 0.+0.j 0.+0.j 0.+0.j]
+
+elham =
+[[ 2.    0.05  0.    0.    0.  ]
+ [ 0.05  1.    0.05  0.    0.  ]
+ [ 0.    0.05  0.5   0.05  0.  ]
+ [ 0.    0.    0.05 -0.5   0.05]
+ [ 0.    0.    0.    0.05 -1.  ]]
+freqs = [1.  1.2 1.4 1.6 1.8]
+temps = [0 0 0 0 0]
+coups =
+[[ 0.5  0.6  0.7  0.8  0.9]
+ [-0.5 -0.6 -0.7 -0.8 -0.9]
+ [-0.3 -0.4 -0.5 -0.6 -0.7]
+ [ 0.3  0.4  0.5  0.6  0.7]
+ [ 0.1  0.2  0.3  0.4  0.5]]
+damps =
+[0.05 0.05 0.05 0.05 0.05]
+
+additional_osc_jump_op_dic =
+{}
+
+additional_osc_output_dic =
+{}
+
+Total time consumed for simulation: 1425.67 seconds

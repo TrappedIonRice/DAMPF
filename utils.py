@@ -26,20 +26,20 @@ def eye_3d(n):
     return T
 
 # Create initial states for oscillators for quantum trajectory method besed on the temperatures
-def create_osc_initial_states(nosc, Ntraj, localDim, temps):
+def create_thermal_osc_initial_states(nosc, Ntraj, localDim, temps):
     
-    osc_state_nparray = np.zeros((Ntraj, nosc), dtype=int)
+    osc_state_nparray = np.zeros((Ntraj, nosc, localDim), dtype=complex)
     
     for i in range(nosc):
         if temps[i] == 0:
-            osc_state_nparray[:, i] = 0
+            osc_state_nparray[:, i, :] = np.eye(localDim)[np.array([0] * Ntraj)]
             continue
         
         # Attention: here temps[i] should be given in terms of nbar
         # Calculate the probability distribution for the oscillator states
         prob_list = np.array([(1 / (temps[i]+1)) * (temps[i] / (1 + temps[i])) ** n for n in range(localDim)])
         prob_list = prob_list / np.sum(prob_list)   # normalize the probability distribution
-        osc_state_nparray[:, i] = np.random.choice(localDim, size=Ntraj, p=prob_list)
+        osc_state_nparray[:, i, :] = np.eye(localDim)[np.random.choice(localDim, size=Ntraj, p=prob_list)]
         
     return osc_state_nparray
 

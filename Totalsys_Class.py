@@ -111,7 +111,7 @@ class Totalsys_Pure:
             
         self.el_initial_state = self.el_initial_state / np.linalg.norm(self.el_initial_state)
         init_el_state = [self.el_initial_state]
-        init_osc_state = [np.eye(self.localDim)[excitation] for excitation in osc_state]
+        init_osc_state = list(osc_state)
         self.state = qtn.MPS_product_state(init_el_state + init_osc_state)
         
     def Time_Evolve_Pure_QT(self, dt, total_time, maxBondDim):

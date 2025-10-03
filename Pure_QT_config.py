@@ -5,62 +5,43 @@ All of the tunable parameters are deliberately set here in a separate file.
 
 
 import numpy as np
+import math
 
 
 # -----------------------------------------------
 # Basic system parameters
 # -----------------------------------------------
 
-Ntraj = 500                # number of trajectories to average over
-nsites = 4                 # number of sites
-nosc = 1                   # total number of oscillators
+Ntraj = 2000               # number of trajectories to average over
+nsites = 2                 # number of sites
+nosc = 7                   # total number of oscillators
 localDim = 10              # local dimension of oscillators
-maxBondDim = 40            # maximal bond dimension of MPS
-timestep = 0.5             # integration time-step
-time = 50*3.1415926*2      # total simulation time
+maxBondDim = 10            # maximal bond dimension of MPS
+timestep = 0.0001          # integration time-step
+time = 1                   # total simulation time
 
 # -----------------------------------------------
 # Initial states
 # -----------------------------------------------
 
-el_initial_state = np.array([1 / np.sqrt(2), 1 / np.sqrt(2), 0, 0], dtype=complex)  # initial electronic state, in the site basis
+el_initial_state = np.array([1 / np.sqrt(2), 1 / np.sqrt(2)], dtype=complex)  # initial electronic state, in the site basis
 
 # -----------------------------------------------
 # Parameters for system dynamics
 # -----------------------------------------------
 
-# Site energies (E_n)
-energies = 3 * np.array([0.5, 0.5, -0.5, -0.5])
-
-# Exchange coupling (which is the off-diagonal part of the El_Hamiltonian)
-# We assume uniform coupling between all sites here for simplicity, but this can be readily changed into cases with different couplings among sites.
-J = 0.3
-
 # Parameters for oscillators
-freqs = np.array([1])
-temps = np.array([0.01]) # temperature are given in term of nbar, which should be much less than localDim
-coups = np.array([[0.5], [0.5], [-0.5], [-0.5]])
-damps = np.array([0.039552])
+freqs = np.array([107.96573614, 151.35253695, 75.31574205, 29.84056346, 49.98315227, 208.41392941, 278.54598055])
+temps = np.array([2] * nosc)# temperature are given in term of nbar, which should be much less than localDim
+coups = np.array([[23.70902183, 28.04179863, 19.16124301, 9.58555597, 14.50739058, 26.61600313, 22.55370035], [-23.70902183, -28.04179863, -19.16124301, -9.58555597, -14.50739058, -26.61600313, -22.55370035]])
+damps = np.array([30.81591027, 42.58938392, 22.08333054, 10.28095595, 15.55502598, 50.0, 50.0])
 
-elham = np.diag(energies)
-for i in range(nsites):
-    for j in range(nsites):
-        if i < j:
-            if (i <= nsites // 2 - 1) and (j >= nsites // 2):
-                elham[i][j] = J / (j - i + 2)
-            else:
-                elham[i][j] = J / (j - i)
-        elif i > j:
-            elham[i][j] = elham[j][i].conjugate()
+elham = np.zeros((nsites, nsites), dtype=complex)
 
 # -----------------------------------------------
 # Additional jump operators and outputs
 # -----------------------------------------------
 
-# additional_osc_jump_op_dic = {
-#     "1": np.sqrt(0.005) * N_operator,
-#     "2": np.sqrt(0.005) * N_operator,
-# }
 additional_osc_jump_op_dic = {}
 additional_osc_output_dic = {}
 # The index represents the oscillator index, which starts from 1
