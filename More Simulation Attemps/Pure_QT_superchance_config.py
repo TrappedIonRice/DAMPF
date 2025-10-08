@@ -10,7 +10,7 @@ import numpy as np
 # -----------------------------------------------
 # Basic system parameters
 # -----------------------------------------------
-Ntraj = 1                  # number of trajectories to average over
+Ntraj = 1000               # number of trajectories to average over
 nsites = 10                # number of sites
 nosc = 10                  # total number of oscillators
 localDim = 10              # local dimension of oscillators

@@ -5,3 +5,4 @@ tqdm
 quimb
 optuna
 kahypar
+fcmaes

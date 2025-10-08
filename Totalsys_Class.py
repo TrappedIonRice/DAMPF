@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 gates = {}
 
+# These gates are pre-constructed for the Pure_QT method
 def init_gates(total_gates):
     # gates['onsite'] = onsite_gate
     # gates['interaction'] = interaction_gates
@@ -25,16 +26,16 @@ def init_gates(total_gates):
 '''
 The class Totalsys_Pure consists of information of the total system, including:
 
-1. Parameters of the system (nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, osc_state)
-2. The total system pure state in MPS form, which consists of a spin site with nsite states at the very left and nosc oscillator sites following it.
-3. The population dynamics during time evolution (population), which will be updated after each time step by calculating the diagonal elements of the reduced density matrix of the electronic part, resulting in nsites numbers.
+1. Parameters of the system (nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, el_initial_state, osc_state)
+2. The total system pure state in MPS form, which consists of a big spin site with nsite states at the very left and nosc oscillator sites following it.
+3. The reduced density matrix dynamics during time evolution, which will be updated after each time step.
+4. Additional requirements for custom jump operators and output operators, which can be specified by user via dictionaries.
 
-as well as methods for quantum trajectory time evolution and population update:
+as well as methods for quantum trajectory time evolution and observable value update:
 
 1. __init__: Initializes everything
-2. Time_Evolve_Pure_QT: Time evolve the total system pure state with the help of various gates and quantum jumps
-3. record_population: Update the population dynamics after each time step
-4. various gates (as illustrated in the utils.py file)
+2. Time_Evolve_Pure_QT: Time evolve the total system pure state with the help of the total_gates and quantum jumps
+3. record_results: Update the population dynamics after each time step
 '''
 
 class Totalsys_Pure:
@@ -102,8 +103,6 @@ class Totalsys_Pure:
         self._n_additional_jump = len(self._additional_keys_jump)
         self._n_additional_output = len(self._additional_keys_output)
         
-
-        
     def initialize_state(self, osc_state):
         
         if np.abs(np.linalg.norm(self.el_initial_state) - 1) > 1e-6:
@@ -112,6 +111,7 @@ class Totalsys_Pure:
         self.el_initial_state = self.el_initial_state / np.linalg.norm(self.el_initial_state)
         init_el_state = [self.el_initial_state]
         init_osc_state = list(osc_state)
+        # The initial state must be a product state without entanglement between electronic and oscillator parts
         self.state = qtn.MPS_product_state(init_el_state + init_osc_state)
         
     def Time_Evolve_Pure_QT(self, dt, total_time, maxBondDim):
@@ -121,12 +121,14 @@ class Totalsys_Pure:
         for step in range(nsteps):
             
             self.state.right_canonize()
-            '''
+            r'''
             In Quantum Trajectory method, the tiny probability of quantum jumps is determined by the formula:
             delta_p_m = <psi| C_m^\dagger C_m |psi> * dt,
             where in our case, C_m is either sqrt(gamma_i * (nbar_i + 1)) * a_i or sqrt(gamma_i * nbar_i) * a_i^\dagger, representing the jump operators for the i-th oscillator. Therefore,
             delta_p1_i = gamma_i * (nbar_i + 1) * <psi| N_i |psi> * dt
             delta_p2_i = gamma_i * nbar_i * <psi| (N_i + 1) |psi> * dt
+            If there are additional jump operators C_k specified by the user, then
+            delta_p3_k = <psi| C_k^\dagger C_k |psi> * dt
             '''
             occ_dict = self.state.compute_local_expectation_canonical(terms=self._occupation_terms, return_all=True)
             # occ_dict is a dict keyed by (i,) in ascending order of the keys in self._occupation_terms
@@ -142,6 +144,11 @@ class Totalsys_Pure:
             probability = np.hstack((probability_1, probability_2, probability_3))
             delta_p = probability.sum()
             
+            # When the dt is not small enough, delta_p may be larger than 1, which is unacceptable
+            if delta_p < 0 or delta_p > 1:
+                print("Maybe you should try a smaller timestep.")
+                raise ValueError(f"At step {step}, the total jump probability {delta_p} is invalid!")
+            
             # --- sampling optimized: first test no-jump quickly ---
             u = np.random.rand()
             if u > delta_p:
@@ -150,7 +157,7 @@ class Totalsys_Pure:
                     self.total_gates,
                     method='zipup',
                     max_bond=maxBondDim,
-                    cutoff=1e-8,
+                    cutoff=1e-12,
                     canonize=True,
                     normalize=True,
                     inplace=True
@@ -267,7 +274,7 @@ class Totalsys_Rho_Fixed_Step:
         
     def Time_Evolve_Rho_Fixed_Step(self, time, dt, max_bond_dim):
         
-        '''
+        r'''
         The Total system is described by three parts of Hamiltonian.
         1. The electronic Hamiltonian (H_el):
             H_el = sum_n E_n |n><n| + sum_{m!=n} J_{mn} |m><n|
@@ -303,13 +310,13 @@ class Totalsys_Rho_Fixed_Step:
                             osc_gates,
                             method='zipup',
                             max_bond=max_bond_dim,
-                            cutoff=1e-8,
+                            cutoff=1e-12,
                         )
                         self.rho[i][j] = self.rho[i][j].gate_with_mpo(
                             int_gates[i][j],
                             method='zipup',
                             max_bond=max_bond_dim,
-                            cutoff=1e-8,
+                            cutoff=1e-12,
                         )
                     else:
                         # Use the Hermitian property of the density matrix to reduce computation
@@ -325,13 +332,13 @@ class Totalsys_Rho_Fixed_Step:
                             int_gates[i][j],
                             method='zipup',
                             max_bond=max_bond_dim,
-                            cutoff=1e-8,
+                            cutoff=1e-12,
                         )
                         self.rho[i][j] = self.rho[i][j].gate_with_mpo(
                             osc_gates,
                             method='zipup',
                             max_bond=max_bond_dim,
-                            cutoff=1e-8,
+                            cutoff=1e-12,
                         )
                     else:
                         # Use the Hermitian property of the density matrix to reduce computation
@@ -449,7 +456,7 @@ class Totalsys_Rho_Adaptive_Step:
         
     def Time_Evolve_Rho_Adaptive_Step(self, total_time, initial_dt, max_bond_dim, err_tol, S1, S2):
         
-        '''
+        r'''
         The Total system is described by three parts of Hamiltonian.
         1. The electronic Hamiltonian (H_el):
             H_el = sum_n E_n |n><n| + sum_{m!=n} J_{mn} |m><n|
@@ -567,13 +574,13 @@ class Totalsys_Rho_Adaptive_Step:
                         osc_gates,
                         method='zipup',
                         max_bond=max_bond_dim,
-                        cutoff=1e-8,
+                        cutoff=1e-12,
                     )
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(
                         int_gates[i][j],
                         method='zipup',
                         max_bond=max_bond_dim,
-                        cutoff=1e-8,
+                        cutoff=1e-12,
                     )
                 else:
                     # Use the Hermitian property of the density matrix to reduce computation
@@ -590,13 +597,13 @@ class Totalsys_Rho_Adaptive_Step:
                         int_gates[i][j],
                         method='zipup',
                         max_bond=max_bond_dim,
-                        cutoff=1e-8,
+                        cutoff=1e-12,
                     )
                     result_rho[i][j] = result_rho[i][j].gate_with_mpo(
                         osc_gates,
                         method='zipup',
                         max_bond=max_bond_dim,
-                        cutoff=1e-8,
+                        cutoff=1e-12,
                     )
                 else:
                     # Use the Hermitian property of the density matrix to reduce computation

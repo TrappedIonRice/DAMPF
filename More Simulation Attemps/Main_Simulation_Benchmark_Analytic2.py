@@ -112,6 +112,57 @@ def worker_chunk(osc_states):
             
     return (partial_sum, max_bond_in_chunk)
 
+def coth(x):
+
+    x = np.asarray(x, dtype=float)
+    out = np.empty_like(x)
+    small = np.abs(x) < 1e-8
+    out[small] = 1.0/x[small] + x[small]/3.0
+    out[~small] = 1.0 / np.tanh(x[~small])
+    return out
+
+def J_approx(Omega):
+    
+    # Parameters for oscillators
+    freq = Pure_QT_config.freqs
+    lam = Pure_QT_config.coups[0]
+    gamma = Pure_QT_config.damps
+    
+    return np.array([np.sum((lam**2) * gamma / ((w - freq)**2 + gamma**2)) for w in Omega])
+
+def Lambda_gausslegendre_approx(t_array, Omega_c, T,
+                         Nnodes=800, Omega_max=None, t_chunk=200):
+
+    t_array = np.asarray(t_array, dtype=float).ravel()
+    # if T == 0:
+    #     return 0.5 * np.log(1.0 + (Omega_c * t_array)**2)
+
+    if Omega_max is None:
+        Omega_max = max(50.0 * Omega_c, 50.0 * T, 1000.0)
+
+    # Gauss–Legendre 节点和权重
+    x, w = leggauss(Nnodes)
+    Omega = 0.5 * (x + 1.0) * Omega_max
+    weights = 0.5 * w * Omega_max
+
+    # 被积函数的 prefactor: J(Omega) * coth(Omega/2T)
+    pref = J_approx(Omega)
+    coth_factor = coth(Omega / (2.0 * T)) / (Omega**2)
+    wip = weights * (pref * coth_factor)
+
+    Nt = t_array.size
+    res = np.empty(Nt, dtype=float)
+
+    for i0 in range(0, Nt, t_chunk):
+        i1 = min(Nt, i0 + t_chunk)
+        t_chunk_arr = t_array[i0:i1]
+        cos_mat = np.cos(np.outer(Omega, t_chunk_arr))
+        one_minus_cos = 1.0 - cos_mat
+        vals = wip @ one_minus_cos
+        res[i0:i1] = vals
+
+    return res
+
 if __name__ == "__main__":
     # create initial states
     osc_state_nparray = utils.create_thermal_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, Pure_QT_config.localDim, Pure_QT_config.temps)
@@ -187,6 +238,9 @@ if __name__ == "__main__":
     # plt.plot(Time, np.trace(ave_reduced_density_matrix, axis1=0, axis2=1).real, label='Total')
     plt.plot(Time, 2 * ave_reduced_density_matrix[0][1].real, label=f'real')
     plt.plot(Time, 2 * ave_reduced_density_matrix[0][1].imag, label=f'imag')
+    Time = np.arange(0, Pure_QT_config.time, Pure_QT_config.timestep)
+    Analytic_approx = np.exp(-2.0 / np.pi * Lambda_gausslegendre_approx(t_array=Time, Omega_c=500, T=Pure_QT_config.temps[0]))
+    plt.plot(Time, Analytic_approx, label='Analytic approx', linestyle='dashed')
 
     plt.grid(True)
     plt.xlabel('Time')
@@ -194,6 +248,9 @@ if __name__ == "__main__":
     plt.title('Coherence Dynamics')
     plt.legend()
     # plt.show()
+
+
+
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"figure_{timestamp}.pdf"

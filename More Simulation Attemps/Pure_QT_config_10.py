@@ -1,4 +1,5 @@
 '''
+This is to benchmarking results from Diego's paper (Fig 5d).
 This is the 2 sites - 2 modes configuration file for the Pure QT (Pure State Quantum Trajectory) DAMPF simulation.
 All of the tunable parameters are deliberately set here in a separate file.
 '''

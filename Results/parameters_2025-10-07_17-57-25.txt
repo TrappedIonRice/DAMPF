@@ -1,0 +1,34 @@
+Ntraj = 1
+nsites = 2
+nosc = 7
+localDim = 10
+maxBondDim = 10
+timestep = 0.001
+time = 100
+
+el_initial_state =
+[0.70710678+0.j 0.70710678+0.j]
+
+elham =
+[[0.+0.j 0.+0.j]
+ [0.+0.j 0.+0.j]]
+freqs = [1.07965736 1.51352537 0.75315742 0.29840563 0.49983152 2.08413929
+ 2.78545981]
+temps = [5 5 5 5 5 5 5]
+coups =
+[[ 0.23709022  0.28041799  0.19161243  0.09585556  0.14507391  0.26616003
+   0.225537  ]
+ [-0.23709022 -0.28041799 -0.19161243 -0.09585556 -0.14507391 -0.26616003
+  -0.225537  ]]
+damps =
+[0.3081591  0.42589384 0.22083331 0.10280956 0.15555026 0.5
+ 0.5       ]
+
+additional_osc_jump_op_dic =
+{}
+
+additional_osc_output_dic =
+{}
+
+Total time consumed for simulation: 1229.93 seconds
+Maximum bond dimension encountered during the simulation: 5

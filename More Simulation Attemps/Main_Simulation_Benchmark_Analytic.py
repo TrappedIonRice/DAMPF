@@ -88,7 +88,7 @@ def worker(osc_state):
     trial_state.Time_Evolve_Pure_QT(Pure_QT_config.timestep, Pure_QT_config.time, Pure_QT_config.maxBondDim)
     
     print("A trajectory finished")
-    
+
     return (trial_state.results, trial_state.maxbond_throughout_whole_evolution)
 
 # new: worker that accepts a chunk (list) of osc_states and returns the *sum* of reduced_density_matrix over that chunk
@@ -98,7 +98,7 @@ def worker_chunk(osc_states):
     max_bond_in_chunk = 1 
 
     for osc_state in osc_states:
-
+        
         res, max_bond_for_traj = worker(osc_state)
         
         if max_bond_for_traj > max_bond_in_chunk:
@@ -110,15 +110,104 @@ def worker_chunk(osc_states):
         else:
             partial_sum += rdm
             
+
     return (partial_sum, max_bond_in_chunk)
+
+def coth(x):
+
+    x = np.asarray(x, dtype=float)
+    out = np.empty_like(x)
+    small = np.abs(x) < 1e-8
+    out[small] = 1.0/x[small] + x[small]/3.0
+    out[~small] = 1.0 / np.tanh(x[~small])
+    return out
+
+def J_Omega(Omega, Omega_c):
+
+    Omega = np.asarray(Omega, dtype=float)
+    return np.exp(-Omega / Omega_c) / np.where(Omega == 0.0, np.inf, Omega)
+
+def J_approx(Omega):
+    
+    # Parameters for oscillators
+    freq = Pure_QT_config.freqs
+    lam =  Pure_QT_config.coups[0]  
+    gamma = Pure_QT_config.damps
+    
+    return np.array([np.sum((lam**2) * gamma / ((w - freq)**2 + gamma**2)) for w in Omega])
+
+def Lambda_gausslegendre_approx(t_array, Omega_c, T,
+                         Nnodes=800, Omega_max=None, t_chunk=200):
+    
+    t_array = np.asarray(t_array, dtype=float).ravel()
+    # if T == 0:
+    #     return 0.5 * np.log(1.0 + (Omega_c * t_array)**2)
+
+    if Omega_max is None:
+        Omega_max = max(50.0 * Omega_c, 50.0 * T, 1000.0)
+
+    # Gauss–Legendre nodes and weights
+    x, w = leggauss(Nnodes)
+    Omega = 0.5 * (x + 1.0) * Omega_max
+    weights = 0.5 * w * Omega_max
+
+    # prefactor: J(Omega) * coth(Omega/2T)
+    pref = J_approx(Omega)
+    coth_factor = coth(Omega / (2.0 * T)) / (Omega**2)
+    wip = weights * (pref * coth_factor)
+
+    Nt = t_array.size
+    res = np.empty(Nt, dtype=float)
+
+    for i0 in range(0, Nt, t_chunk):
+        i1 = min(Nt, i0 + t_chunk)
+        t_chunk_arr = t_array[i0:i1]
+        cos_mat = np.cos(np.outer(Omega, t_chunk_arr))
+        one_minus_cos = 1.0 - cos_mat
+        vals = wip @ one_minus_cos
+        res[i0:i1] = vals
+
+    return res
+
+def Lambda_gausslegendre(t_array, Omega_c, T,
+                         Nnodes=800, Omega_max=None, t_chunk=200):
+    
+    t_array = np.asarray(t_array, dtype=float).ravel()
+    if T == 0:
+        return 0.5 * np.log(1.0 + (Omega_c * t_array)**2)
+
+    if Omega_max is None:
+        Omega_max = max(50.0 * Omega_c, 50.0 * T, 1000.0)
+
+    # Gauss–Legendre nodes and weights
+    x, w = leggauss(Nnodes)
+    Omega = 0.5 * (x + 1.0) * Omega_max
+    weights = 0.5 * w * Omega_max
+
+    # prefactor: J(Omega) * coth(Omega/2T)
+    pref = J_Omega(Omega, Omega_c)
+    coth_factor = coth(Omega / (2.0 * T)) / (Omega**2)
+    wip = weights * (pref * coth_factor)
+
+    Nt = t_array.size
+    res = np.empty(Nt, dtype=float)
+
+    for i0 in range(0, Nt, t_chunk):
+        i1 = min(Nt, i0 + t_chunk)
+        t_chunk_arr = t_array[i0:i1]
+        cos_mat = np.cos(np.outer(Omega, t_chunk_arr))
+        one_minus_cos = 1.0 - cos_mat
+        vals = wip @ one_minus_cos
+        res[i0:i1] = vals
+
+    return res
+
+
 
 if __name__ == "__main__":
     # create initial states
     osc_state_nparray = utils.create_thermal_osc_initial_states(Pure_QT_config.nosc, Pure_QT_config.Ntraj, Pure_QT_config.localDim, Pure_QT_config.temps)
-    # osc_state_nparray = np.zeros((1, 1, Pure_QT_config.localDim),dtype=complex)
-    # osc_state_nparray[0][0][7] = 1.0 + 0.0j
     osc_state_array = list(osc_state_nparray)
-    # print("osc_state_array:\n", osc_state_array)
 
     # preconstruct gates (same as you did) - these will be passed to initializer
     print("Constructing gates...")
@@ -150,6 +239,7 @@ if __name__ == "__main__":
 
     # prepare accumulator for sums
     sum_reduced_density_matrix = None
+
     max_bond_dimension_throughout_simulation = 1
 
     print("Creating multiprocessing pool...")
@@ -162,7 +252,7 @@ if __name__ == "__main__":
         print("Simulation started, timing...")
 
         for partial_rdm, max_bond_from_chunk in pool.imap_unordered(worker_chunk, chunks):
-            
+
             if max_bond_from_chunk > max_bond_dimension_throughout_simulation:
                 max_bond_dimension_throughout_simulation = max_bond_from_chunk
 
@@ -174,6 +264,7 @@ if __name__ == "__main__":
 
     total_time = time.time() - t
     print(f"Total time consumed for simulation (parallel part): {total_time:.2f} seconds")
+
     print(f"Maximum bond dimension encountered during the simulation: {max_bond_dimension_throughout_simulation}")
 
 
@@ -187,6 +278,12 @@ if __name__ == "__main__":
     # plt.plot(Time, np.trace(ave_reduced_density_matrix, axis1=0, axis2=1).real, label='Total')
     plt.plot(Time, 2 * ave_reduced_density_matrix[0][1].real, label=f'real')
     plt.plot(Time, 2 * ave_reduced_density_matrix[0][1].imag, label=f'imag')
+    Time = np.arange(0, Pure_QT_config.time, Pure_QT_config.timestep)
+    
+    Analytic = np.exp(-2.0 / np.pi * Lambda_gausslegendre(t_array=Time, Omega_c=500, T=Pure_QT_config.temps[0]))
+    plt.plot(Time, Analytic, label='Analytic')
+    Analytic_approx = np.exp(-2.0 / np.pi * Lambda_gausslegendre_approx(t_array=Time, Omega_c=500, T=Pure_QT_config.temps[0]))
+    plt.plot(Time, Analytic_approx, label='Analytic approx', linestyle='dashed')
 
     plt.grid(True)
     plt.xlabel('Time')
@@ -233,5 +330,4 @@ if __name__ == "__main__":
         f.write(f"{Pure_QT_config.additional_osc_output_dic}\n")
         
         f.write(f"\nTotal time consumed for simulation: {total_time:.2f} seconds\n")
-
         f.write(f"Maximum bond dimension encountered during the simulation: {max_bond_dimension_throughout_simulation}\n")

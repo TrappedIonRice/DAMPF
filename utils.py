@@ -8,6 +8,17 @@ import scipy
 import quimb.tensor as qtn
 
 
+
+
+
+
+
+
+
+
+'''
+--- Functions shared by all three classes ---
+'''
 # Construct annihilation and creation operators for a single harmonic oscillator
 def annihilation_operator(N, dtype=complex):
     
@@ -17,6 +28,18 @@ def annihilation_operator(N, dtype=complex):
         a[n-1, n] = np.sqrt(n)
     return a
 
+
+
+
+
+
+
+
+
+
+'''
+--- Functions specific to the Pure_QT Method ---
+'''
 # Construct a 3D tensor whose elements are 1 if all three indices are equal, and 0 otherwise
 def eye_3d(n):
     
@@ -43,9 +66,7 @@ def create_thermal_osc_initial_states(nosc, Ntraj, localDim, temps):
         
     return osc_state_nparray
 
-'''
-The evolution gates for electronic and oscillator parts are simply exponentials of the corresponding local Hamiltonians.
-'''
+# The evolution gates for electronic and oscillator parts are simply exponentials of the corresponding local Hamiltonians.
 def construct_onsite_gate(elham, nosc, freqs, a, a_dagger, dt):
         
     gate = [scipy.linalg.expm(-1j * dt * elham)]
@@ -56,9 +77,7 @@ def construct_onsite_gate(elham, nosc, freqs, a, a_dagger, dt):
     
     return qtn.MPO_product_operator(gate)
 
-'''
-The construction of interaction gates requires some derivation, which can be found in my illustrative notes of the whole project.
-'''
+# The construction of interaction gates requires some derivation, which can be found in the illustrative notes of the whole project.
 def construct_interaction_gates(nsites, nosc, localDim, coups, a, a_dagger, dt):
     
     gates = []
@@ -84,7 +103,6 @@ def construct_interaction_gates(nsites, nosc, localDim, coups, a, a_dagger, dt):
         # fullmpo = submpo.fill_empty_sites(phys_dim=localDim, inplace=False)
         
         gates.append(fullmpo)
-        
     
     return gates
 
@@ -105,9 +123,7 @@ def fill_sites(submpo, nsites, nosc, localDim, second_index):
     fullmpo = qtn.MatrixProductOperator(tensor_array, shape='lrud')
     return fullmpo
 
-'''
-The non-unitary gates for the oscillators are exponentials of the non-Hermitian part of the effective Hamiltonian.
-'''
+# The non-unitary gates for the oscillators are exponentials of the non-Hermitian part of the effective Hamiltonian.
 def construct_on_site_non_unitary_gates(nsites, nosc, localDim, temps, freqs, damps, a, a_dagger, dt):
     
     gates = [np.eye(nsites)]
@@ -139,21 +155,21 @@ def construct_all_gates(nsites, elham, nosc, freqs, coups, temps, damps, localDi
             which_A='lower', which_B='upper', 
             contract=True, fuse_multibonds=True, compress=True, 
             inplace=False, inplace_A=False, 
-            max_bond=100, cutoff=1e-8, method='svd'
+            max_bond=100, cutoff=1e-12, method='svd'
         )
     total_gates = qtn.tensor_network_apply_op_op(
         total_gates, onsite_gate, 
         which_A='lower', which_B='upper',
         contract=True, fuse_multibonds=True, compress=True,
         inplace=False, inplace_A=False,
-        max_bond=100, cutoff=1e-8, method='svd'
+        max_bond=100, cutoff=1e-12, method='svd'
     )
     total_gates = qtn.tensor_network_apply_op_op(
         total_gates, on_site_non_unitary_gates,
         which_A='lower', which_B='upper',
         contract=True, fuse_multibonds=True, compress=True,
         inplace=False, inplace_A=False,
-        max_bond=100, cutoff=1e-8, method='svd'
+        max_bond=100, cutoff=1e-12, method='svd'
     )
     for gate in interaction_gates:
         total_gates = qtn.tensor_network_apply_op_op(
@@ -161,11 +177,8 @@ def construct_all_gates(nsites, elham, nosc, freqs, coups, temps, damps, localDi
             which_A='lower', which_B='upper', 
             contract=True, fuse_multibonds=True, compress=True, 
             inplace=False, inplace_A=False, 
-            max_bond=100, cutoff=1e-8, method='svd'
+            max_bond=100, cutoff=1e-12, method='svd'
         )
-        
-    # print(total_gates)
-    # exit()
     
     return total_gates
 
@@ -204,6 +217,18 @@ def calculate_additional_expectation(state, additional_output_dic):
     
     return np.array(list(additional_expectation.values())).real
 
+
+
+
+
+
+
+
+
+
+'''
+--- Functions specific to the Density Matrix Method ---
+'''
 # Create initial thermal state as the initial state for the density matrix methods
 def create_thermal_mps(nosc, localDim, temps, freqs):
     

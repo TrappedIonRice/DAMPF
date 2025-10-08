@@ -1,16 +1,19 @@
+'''
+This is the file for fitting the spectral density curve with a sum of Lorentzian functions, using an elementary approach without advanced optimizers. The results are not so stable.
+'''
+
+
+
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 from scipy.optimize import differential_evolution
 import matplotlib.pyplot as plt
-
-from fcmaes import retry
-from fcmaes.optimizer import Cma_cpp 
 from datetime import datetime
 
 
-omega_l, omega_r = 0.0, 800.0
+omega_l, omega_r = 0.0, 300.0
 N = 1000
-Q = 7
+Q = 6
 A = 1.0
 omega_c = 100.0
 xlg, w = leggauss(N)
@@ -21,7 +24,6 @@ def J(omega):
     return A * omega * np.exp(-omega / omega_c)
 
 def V_tilde(omega, freq, gamma, lam):
-
     return np.sum((lam**2) * gamma / ((omega - freq)**2 + gamma**2))
 
 def f_obj(x):
@@ -29,12 +31,6 @@ def f_obj(x):
     freq = x[:Q]
     gamma = x[Q:2*Q]
     lam = x[2*Q:3*Q]
-    # # 数值保护：强烈惩罚不合法 gamma 或 nan/inf
-    # if np.any(~np.isfinite(x)):
-    #     return 1e12
-    # if np.any(gamma <= 0):
-    #     return 1e10 + np.sum(np.where(gamma<=0, 1e6, 0))
-
     diff_sq = 0.0
 
     for n in range(N):
@@ -44,38 +40,41 @@ def f_obj(x):
 
     return float(diff_sq)
 
+def f_obj_transformed(x):
+    # x layout: [freq_0..freq_{Q-1}, log_gamma_0..log_gamma_{Q-1}, log_lam_0..log_lam_{Q-1}]
+    x = np.asarray(x, dtype=float)
+    freq = np.sort(x[:Q])     # enforce ordering -> removes permutation symmetry
+    log_gamma = x[Q:2*Q]
+    log_lam = x[2*Q:3*Q]
+    gamma = np.exp(log_gamma)
+    lam = np.exp(log_lam)
+
+    diff_sq = 0.0
+    for n in range(N):
+        Jn = J(omega_nodes[n])
+        Vn = V_tilde(omega_nodes[n], freq, gamma, lam)
+        diff_sq += weight_nodes[n] * (Jn - Vn)**2
+
+    return float(diff_sq)
+
+
 bounds = []
 omega_max = 300.0
 for _ in range(Q):
-    bounds.append((0.0, omega_max))        # frequency
+    bounds.append((0.0, omega_max))               # freq
 for _ in range(Q):
-    bounds.append((1e-3, 50.0))            # gamma > 0
+    bounds.append((np.log(1e-6), np.log(50.0)))   # log_gamma
 for _ in range(Q):
-    bounds.append((0.0, 100.0))            # lambda (非负)
+    bounds.append((np.log(1e-8), np.log(200.0)))  # log_lam
 
-# 先用比较严格的预算和随机种子，便于重复实验
-# res = differential_evolution(f_obj, bounds, maxiter=50, popsize=15, seed=1234)
-# print("best fun:", res.fun)
-# print("best x:", res.x)
 
-max_evals = 50000
+res = differential_evolution(f_obj_transformed, bounds, maxiter=50, popsize=15, seed=1234)
+print("best fun:", res.fun)
+print("best x:", res.x)
 
-optimizer = Cma_cpp(int(max_evals))
-x0 = np.random.uniform(0.0, 50, 3*Q)
-sigma0 = np.random.uniform(5.0, 10.0, 3*Q)
-
-res = retry.minimize(
-    f_obj,                 # 目标函数
-    bounds,              # bounds
-    optimizer=optimizer, # 使用 C++ CMA-ES
-)
-
-print("最佳解 x:", np.array(res.x))
-print("最佳值 f(x):", res.fun)
-
-freq_est = res.x[:Q]
-gamma_est = res.x[Q:2*Q]
-lam_est = res.x[2*Q:3*Q]
+freq_est = np.exp(res.x[:Q])
+gamma_est = np.exp(res.x[Q:2*Q])
+lam_est = np.exp(res.x[2*Q:3*Q])
 
 omega_plot = np.linspace(0.0, omega_max, 1000)
 J_plot = J(omega_plot)

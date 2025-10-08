@@ -11,59 +11,39 @@ import numpy as np
 # Basic system parameters
 # -----------------------------------------------
 
-Ntraj = 1000                # number of trajectories to average over
-nsites = 4                 # number of sites
-nosc = 1                   # total number of oscillators
+Ntraj = 2000               # number of trajectories to average over
+nsites = 2                 # number of sites
+nosc = 2                   # total number of oscillators
 localDim = 10              # local dimension of oscillators
 maxBondDim = 10            # maximal bond dimension of MPS
-timestep = 0.1             # integration time-step
-time = 50*3.1415926*2      # total simulation time
+timestep = 0.01            # integration time-step (timestep needs to be tuned down when the temperatures of oscillators are high)
+time = 80                  # total simulation time
 
 # -----------------------------------------------
 # Initial states
 # -----------------------------------------------
 
-el_initial_state = np.array([1 / np.sqrt(2), 1 / np.sqrt(2), 0, 0], dtype=complex)  # initial electronic state, in the site basis
+el_initial_state = np.array([1, 0], dtype=complex)  # initial electronic state, in the site basis
 
 # -----------------------------------------------
 # Parameters for system dynamics
 # -----------------------------------------------
 
-# Site energies (E_n)
-energies = 3 * np.array([0.5, 0.5, -0.5, -0.5])
-
-# Exchange coupling (which is the off-diagonal part of the El_Hamiltonian)
-# We assume uniform coupling between all sites here for simplicity, but this can be readily changed into cases with different couplings among sites.
-J = 0.3
-
 # Parameters for oscillators
-freqs = np.array([1])
-temps = np.array([0.01]) # temperature are given in term of nbar, which should be much less than localDim
-coups = np.array([[0.5], [0.5], [-0.5], [-0.5]])
-damps = np.array([0.039552])
+freqs = None
+temps = np.array([0.036, 0.036]) # temperature are given in term of nbar, which should be much less than localDim
+coups = None
+damps = None
 
-elham = np.diag(energies)
-for i in range(nsites):
-    for j in range(nsites):
-        if i < j:
-            if (i <= nsites // 2 - 1) and (j >= nsites // 2):
-                elham[i][j] = J / (j - i + 2)
-            else:
-                elham[i][j] = J / (j - i)
-        elif i > j:
-            elham[i][j] = elham[j][i].conjugate()
+DELTA = 1  # exchange coupling strength
+elham = DELTA * np.array([[0, 1], [1, 0]], dtype=float) / 2   # exchange matrix
 
 # -----------------------------------------------
 # Additional jump operators and outputs
 # -----------------------------------------------
 
-# additional_osc_jump_op_dic = {
-#     "1": np.sqrt(0.005) * N_operator,
-#     "2": np.sqrt(0.005) * N_operator,
-# }
 additional_osc_jump_op_dic = {}
 additional_osc_output_dic = {}
-# The index represents the oscillator index, which starts from 1
 
 # -----------------------------------------------
 # Print out all parameters
