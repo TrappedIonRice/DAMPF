@@ -1,3 +1,9 @@
+'''
+This is to benchmarking results from Diego's paper regarding the average phonon number evolution (Fig 8b in the Appendix C).
+'''
+
+
+
 import os
 
 # --- Environment variable setup (no changes) ---

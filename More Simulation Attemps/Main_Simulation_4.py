@@ -1,5 +1,5 @@
 '''
-This example demonstrates running DAMPF simulation using the pure state evolution assisted by quantum trajectories (QT) method, which can be readily put into parallel computing.
+This is to benchmarking results from Diego's paper (Fig 2b).
 '''
 
 

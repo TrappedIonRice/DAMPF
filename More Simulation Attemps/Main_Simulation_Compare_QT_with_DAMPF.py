@@ -1,3 +1,9 @@
+'''
+This is to benchmarking Pure_QT results with Rho_Fixed_Step results.
+'''
+
+
+
 import numpy as np
 import Pure_QT_config
 import Rho_Fixed_Step_config

@@ -1,6 +1,5 @@
 '''
-This is the 5 sites - 5 modes configuration file for the Pure QT (Pure State Quantum Trajectory) DAMPF simulation.
-All of the tunable parameters are deliberately set here in a separate file.
+This is the 5 sites - 5 modes default configuration file for the Pure QT (Pure State Quantum Trajectory) DAMPF simulation.
 '''
 
 

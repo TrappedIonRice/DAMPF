@@ -1,5 +1,5 @@
 '''
-This example demonstrates running DAMPF simulation using the pure state evolution assisted by quantum trajectories (QT) method, which can be readily put into parallel computing.
+This is to run the pure dephasing model of a spin, which has an analytic solution to compare with.
 '''
 
 import os
