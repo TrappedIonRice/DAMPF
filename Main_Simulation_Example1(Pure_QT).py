@@ -19,7 +19,6 @@ import time
 import utils
 from datetime import datetime
 import math
-from numpy.polynomial.legendre import leggauss
 
 # debug prints
 # print("os.cpu_count():", multiprocessing.cpu_count())
@@ -131,7 +130,8 @@ if __name__ == "__main__":
         temps=Pure_QT_config.temps,
         damps=Pure_QT_config.damps,
         localDim=Pure_QT_config.localDim,
-        dt=Pure_QT_config.timestep
+        dt=Pure_QT_config.timestep,
+        additional_osc_jump_op_dic=Pure_QT_config.additional_osc_jump_op_dic
     )
     print("Gate construction finished.")
 
@@ -180,8 +180,9 @@ if __name__ == "__main__":
     # now average
     ave_reduced_density_matrix = sum_reduced_density_matrix / float(Ntraj)
 
-    # Plot the averaged population dynamics after time evolution
+    # Plot the averaged reduced density matrix dynamics after time evolution
     Time = np.arange(0, Pure_QT_config.time, Pure_QT_config.timestep)
+    Time = Time[:ave_reduced_density_matrix.shape[2]]  # in case of slight size mismatch due to rounding
     # for site in range(Pure_QT_config.nsites):
     #     plt.plot(Time, ave_reduced_density_matrix[site][site].real, label=f'Site {site}')
     # plt.plot(Time, np.trace(ave_reduced_density_matrix, axis1=0, axis2=1).real, label='Total')

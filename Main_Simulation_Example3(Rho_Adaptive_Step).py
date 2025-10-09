@@ -21,7 +21,8 @@ if __name__ == "__main__":
         damps=Rho_Adaptive_Step_config.damps,
         coups=Rho_Adaptive_Step_config.coups,
         dt_array=Rho_Adaptive_Step_config.dt_array,
-        el_initial_state=Rho_Adaptive_Step_config.el_initial_state
+        el_initial_state=Rho_Adaptive_Step_config.el_initial_state,
+        additional_osc_output_dic=Rho_Adaptive_Step_config.additional_osc_output_dic
     )   # Initialize the total system density matrix in MPS form
     
     Time = Total_Rho.Time_Evolve_Rho_Adaptive_Step(
@@ -33,15 +34,23 @@ if __name__ == "__main__":
         S2=Rho_Adaptive_Step_config.S2
     )   # Time evolve the total system density matrix
 
-
-    # Plot the population dynamics after time evolution
-    plt.plot(Time, np.array(Total_Rho.populations).sum(axis=0), label='Total_trace')
-    for i in range(Rho_Adaptive_Step_config.nsites):
-        plt.plot(Time, Total_Rho.populations[i], label=f'Site {i+1}')
+    Total_Rho.results["reduced_density_matrix"] = np.array(Total_Rho.results["reduced_density_matrix"])
+    Total_Rho.results["additional_osc_output"] = np.array(Total_Rho.results["additional_osc_output"])
+    Time = Time[:Total_Rho.results["reduced_density_matrix"].shape[2]]  # in case of slight size mismatch due to rounding
+    # Plot the reduced density matrix dynamics after time evolution
+    # plt.plot(Time, np.trace(Total_Rho.results["reduced_density_matrix"], axis1=0, axis2=1).real, label='Total_trace')
+    # for i in range(Rho_Adaptive_Step_config.nsites):
+    #     plt.plot(Time, Total_Rho.results["reduced_density_matrix"][i][i], label=f'Site {i+1}')
+    # plt.plot(Time, Total_Rho.results["reduced_density_matrix"][0][1].real, label='Re(rho_12)')
+    # plt.plot(Time, Total_Rho.results["reduced_density_matrix"][0][1].imag, label='Im(rho_12)')
+    plt.plot(Time, Total_Rho.results["additional_osc_output"][0].real, label='ave_phonon_osc1')
+    plt.plot(Time, Total_Rho.results["additional_osc_output"][1].real, label='ave_phonon_osc2')
         
     plt.xlabel('Time')
-    plt.ylabel('Population')
+    # plt.ylabel('Population')
+    # plt.title('Population Dynamics')
+    plt.ylabel('Average Phonon Number')
+    plt.title('Phonon Dynamics')
     plt.legend()
-    plt.title('Population Dynamics')
     plt.grid('True')
     plt.show()

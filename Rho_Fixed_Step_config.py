@@ -42,6 +42,17 @@ coups = np.array([[0.5, 0.6], [-0.5, -0.6]])
 damps = np.array([0.05, 0.05])
 
 # -----------------------------------------------
+# Additional outputs
+# -----------------------------------------------
+
+N_operator = np.diag(np.arange(localDim))  # number operator for oscillators
+
+additional_osc_output_dic = {
+    "1": N_operator,
+    "2": N_operator,
+}
+
+# -----------------------------------------------
 # Print out all parameters
 # -----------------------------------------------
 

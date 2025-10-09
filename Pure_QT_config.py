@@ -11,7 +11,7 @@ import numpy as np
 # Basic system parameters
 # -----------------------------------------------
 
-Ntraj = 1000                # number of trajectories to average over
+Ntraj = 500                # number of trajectories to average over
 nsites = 2                 # number of sites
 nosc = 2                   # total number of oscillators
 localDim = 10              # local dimension of oscillators
@@ -53,15 +53,15 @@ elham = np.array([
 
 N_operator = np.diag(np.arange(localDim))  # number operator for oscillators
 
-# additional_osc_jump_op_dic = {
-#     "1": np.sqrt(0.005) * N_operator,
-#     "2": np.sqrt(0.005) * N_operator,
-# }
+additional_osc_jump_op_dic = {
+    "1": np.sqrt(0.005) * N_operator,
+    "2": np.sqrt(0.005) * N_operator,
+}
 # additional_osc_output_dic = {
 #     "1": N_operator,
 #     "2": N_operator,
 # }
-additional_osc_jump_op_dic = {}
+# additional_osc_jump_op_dic = {}
 additional_osc_output_dic = {}
 # The index represents the oscillator index, which starts from 1
 

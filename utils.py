@@ -124,28 +124,31 @@ def fill_sites(submpo, nsites, nosc, localDim, second_index):
     return fullmpo
 
 # The non-unitary gates for the oscillators are exponentials of the non-Hermitian part of the effective Hamiltonian.
-def construct_on_site_non_unitary_gates(nsites, nosc, localDim, temps, freqs, damps, a, a_dagger, dt):
+def construct_on_site_non_unitary_gates(nsites, nosc, localDim, temps, freqs, damps, a, a_dagger, dt, additional_osc_jump_op_dic):
     
     gates = [np.eye(nsites)]
     nbar_array = temps
     
     for i in range(nosc):
-    
-        local_gate = scipy.linalg.expm(-0.5 * dt * damps[i] * ((1 + 2 * nbar_array[i]) * a_dagger @ a + nbar_array[i] * np.eye(localDim)))
         
+        if str(i+1) in additional_osc_jump_op_dic:
+            local_gate = scipy.linalg.expm(-0.5 * dt * damps[i] * ((1 + 2 * nbar_array[i]) * a_dagger @ a + nbar_array[i] * np.eye(localDim)) - 0.5 * dt * additional_osc_jump_op_dic[str(i+1)].conj().T @ additional_osc_jump_op_dic[str(i+1)])
+        else:
+            local_gate = scipy.linalg.expm(-0.5 * dt * damps[i] * ((1 + 2 * nbar_array[i]) * a_dagger @ a + nbar_array[i] * np.eye(localDim)))
+            
         gates.append(local_gate)
     
     return qtn.MPO_product_operator(gates)
 
 # Package all gates together for easy access
-def construct_all_gates(nsites, elham, nosc, freqs, coups, temps, damps, localDim, dt):
+def construct_all_gates(nsites, elham, nosc, freqs, coups, temps, damps, localDim, dt, additional_osc_jump_op_dic):
     
     a = annihilation_operator(localDim)
     a_dagger = a.conj().T
     
     onsite_gate = construct_onsite_gate(elham, nosc, freqs, a, a_dagger, dt)
     interaction_gates = construct_interaction_gates(nsites, nosc, localDim, coups, a, a_dagger, dt)
-    on_site_non_unitary_gates = construct_on_site_non_unitary_gates(nsites, nosc, localDim, temps, freqs, damps, a, a_dagger, dt)
+    on_site_non_unitary_gates = construct_on_site_non_unitary_gates(nsites, nosc, localDim, temps, freqs, damps, a, a_dagger, dt, additional_osc_jump_op_dic)
     
     total_gates_np = [np.eye(nsites)] + [np.eye(localDim) for _ in range(nosc)]
     total_gates = qtn.MPO_product_operator(total_gates_np)
@@ -278,6 +281,105 @@ def trace_MPS(mps, nosc, localDim):
     # Contract the MPS with the trace assistant (no need to rebuild the assistant each call)
     return complex(trace_assistant @ mps)
 
+def _trace_op_on_mps(op, mps, ik0, nosc, localDim):
+    
+    """
+    Compute Tr(op * R) where R is the operator represented by 'mps' (flattened MPO as MPS).
+    Assumptions:
+      - mps is an iterable of length `nosc`, each site tensor shape (L, R, phys)
+      - phys == localDim * localDim and flattening is row-major with index order (in, out):
+          p = in*localDim + out
+      - op is a (localDim, localDim) array; contraction computed so result is scalar (complex allowed).
+    Returns:
+      complex scalar = Tr(op @ R)
+    """
+    # Ensure op is ndarray
+    op = np.asarray(op)
+    # start with a trivial "left" contraction matrix of shape (1,1)
+    cur = np.array([[1.]], dtype=complex)
+
+    for site_idx in range(nosc):
+        # get raw array from quimb tensor object (you used .data)
+        T_raw = np.asarray(mps[site_idx].data)
+
+        # Normalize tensor to shape (Lb, Rb, phys)
+        if T_raw.ndim == 3:
+            # normal case: (L, R, phys)
+            T3 = T_raw
+            Lb, Rb, phys = T3.shape
+        elif T_raw.ndim == 2:
+            # boundary case: either first site (no left bond) or last site (no right bond)
+            if site_idx == 0:
+                # first tensor missing left bond: assume shape is (R, phys)
+                Rb, phys = T_raw.shape
+                Lb = 1
+                T3 = T_raw.reshape(Lb, Rb, phys)
+            elif site_idx == (nosc - 1):
+                # last tensor missing right bond: assume shape is (L, phys)
+                Lb, phys = T_raw.shape
+                Rb = 1
+                T3 = T_raw.reshape(Lb, Rb, phys)
+            else:
+                raise ValueError(f"Unexpected 2D tensor at internal site {site_idx}")
+        else:
+            raise ValueError(f"Unexpected tensor ndim={T_raw.ndim} at site {site_idx}")
+
+        # check physical dimension
+        if phys != localDim * localDim:
+            raise ValueError(
+                f"site {site_idx} physical dim mismatch: got {phys}, expected {localDim*localDim}"
+            )
+
+        # reshape to (L, R, in, out) using row-major flattening of (in,out): p = in*localDim + out
+        T4 = T3.reshape(Lb, Rb, localDim, localDim)
+
+        if site_idx == ik0:
+            # contract physical indices with op so we get a matrix of shape (L, R)
+            # axes: T4 has (L,R,in,out) and op has (in,out) -> tensordot over (out,in) <-> (in,out)
+            # we want sum_{in,out} op[out,in] * T4[... , in, out]
+            # aligning axes ([3,2],[0,1]) matches T4(out,in) with op(in,out) when op is standard (in,out)
+            # The chosen axes produce shape (L, R)
+            site_mat = np.tensordot(T4, op, axes=([3, 2], [0, 1]))
+        else:
+            # trace over physical indices: sum_{in} T4[..., in, in] -> result shape (L, R)
+            site_mat = np.einsum('lrkk->lr', T4)
+
+        # contract bond with current accumulator `cur`
+        # cur shape is (cur_left, cur_right), site_mat is (L, R), we contract cur_right with L
+        cur = np.tensordot(cur, site_mat, axes=([1], [0]))
+
+    # after contracting all sites, cur should be shape (1,1) -> scalar
+    return cur.squeeze()
+
+
+def expectation_on_Rho(op, rho, ik, nosc, localDim):
+    """
+    Compute expectation value Tr[(I_spin ⊗ op_ik) * Rho_full]
+    where rho is a spin-indexed matrix of MPS (rho[p,q] is the oscillator operator for spin block |p><q|).
+    Only diagonal spin blocks contribute to the trace over spin, so we sum Tr(op * rho[s,s]) over s.
+    Parameters:
+      - op: (localDim x localDim) local operator acting on oscillator `ik` (1-based index).
+      - rho: 2D array-like of shape (d_spin, d_spin) containing MPS objects (each is iterable of site tensors)
+      - ik: 1-based index of oscillator site where `op` acts
+      - nosc: number of oscillator sites
+      - localDim: physical dimension per oscillator
+    Returns:
+      complex scalar expectation value
+    """
+    op = np.asarray(op)
+    if op.shape != (localDim, localDim):
+        raise ValueError("op must have shape (localDim, localDim)")
+
+    # convert ik to 0-based
+    ik0 = ik - 1
+    # spin dimension
+    dspin = len(rho)
+    total = 0+0j
+    for s in range(dspin):
+        mps = rho[s][s] if hasattr(rho[s], '__getitem__') else rho[s,s]  # allow numpy or list-of-lists
+        total += _trace_op_on_mps(op, mps, ik0, nosc, localDim)
+        
+    return total
     
 # Utility functions to construct local Hamiltonian
 def local_ham_osc(omega, localDim, N_operator):

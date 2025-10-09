@@ -27,15 +27,15 @@ def init_gates(total_gates):
 The class Totalsys_Pure consists of information of the total system, including:
 
 1. Parameters of the system (nsites, nosc, localDim, elham, freqs, coups, damps, temps, time, timestep, el_initial_state, osc_state)
-2. The total system pure state in MPS form, which consists of a big spin site with nsite states at the very left and nosc oscillator sites following it.
-3. The reduced density matrix dynamics during time evolution, which will be updated after each time step.
-4. Additional requirements for custom jump operators and output operators, which can be specified by user via dictionaries.
+2. The total system pure state in MPS form, which consists of a big spin site with nsite states at the very left and nosc oscillator sites following it
+3. The reduced density matrix dynamics during time evolution, which will be updated after each time step
+4. Additional requirements for custom jump operators and output operators, which can be specified by user via dictionaries,
 
 as well as methods for quantum trajectory time evolution and observable value update:
 
 1. __init__: Initializes everything
 2. Time_Evolve_Pure_QT: Time evolve the total system pure state with the help of the total_gates and quantum jumps
-3. record_results: Update the population dynamics after each time step
+3. record_results: Update the reduced density matrix as well as the additional output requirements after each time step.
 '''
 
 class Totalsys_Pure:
@@ -44,7 +44,7 @@ class Totalsys_Pure:
         
         self.maxbond_throughout_whole_evolution = 1
         
-        # Parameter information initialization
+        # parameter information initialization
         self.nsites = nsites
         self.nosc = nosc
         self.localDim = localDim
@@ -56,23 +56,23 @@ class Totalsys_Pure:
         self.a = utils.annihilation_operator(localDim)
         self.a_dagger = self.a.conj().T
         
-        # Gates initialization
+        # gates initialization
         self.total_gates = gates['total_gates']
         # self.onsite_gate = gates['onsite']
         # self.interaction_gates = gates['interaction']
         # self.on_site_non_unitary_gates = gates['on_site_non_unitary']
         
-        # State initialization
+        # state initialization
         self.el_initial_state = el_initial_state
         self.initialize_state(osc_state)
         
-        # Population initialization
+        # output initialization
         self.results = {
             "reduced_density_matrix": np.zeros((nsites, nsites, int(time/timestep)), dtype=complex),
-            "additional_osc_output": np.array([np.zeros(int(time/timestep), dtype=complex) for _ in range(len(additional_osc_output_dic))])
+            "additional_osc_output": np.zeros((len(additional_osc_output_dic), int(time / timestep)), dtype=complex)
         }
         
-        # Additional Requirements initialization
+        # additional Requirements initialization
         self.additional_osc_jump_op_dic = additional_osc_jump_op_dic
         self.additional_osc_output_dic = additional_osc_output_dic
         
@@ -219,26 +219,25 @@ class Totalsys_Pure:
             # nothing to do (already initialized)
             pass
 
-        
-        
+
 '''
 The class Totalsys_Rho_Fixed_Step consists of information of the total system, including:
 
-1. Parameters of the system (nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham)
+1. Parameters of the system (nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham, el_initial_state)
 2. The total system density matrix in MPS form (rho), which is a 2D array of shape (nsites, nsites), with each element being an MPS (flattened MPO) representing the density matrices of the oscillators
-3. The population dynamics during time evolution (populations), which will be updated after each time step by tracing out the diagonal MPS elements, resulting in nsites numbers,
+3. The reduced density matrix dynamics during time evolution, which will be updated after each time step,
 
-as well as methods for fixed step time evolution, population update, and construction of various evolution gates:
+as well as methods for time evolution and observable value update:
 
 1. __init__: Initializes everything
 2. Time_Evolve_Rho_Fixed_Step: Time evolve the total system density matrix with the help of various gates
-3. update_populations: Update the population dynamics after each time step
-4. various gates (as illustrated below)
+3. update_results: Update the reduced density matrix as well as the additional output requirements after each time step
+4. various evolution gates (as illustrated below).
 '''
 
 class Totalsys_Rho_Fixed_Step:
     
-    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham, el_initial_state):
+    def __init__(self, nsites, nosc, localDim, temps, freqs, damps, coups, time, timestep, elham, el_initial_state, additional_osc_output_dic={}):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -252,13 +251,17 @@ class Totalsys_Rho_Fixed_Step:
         
         self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
         
-        # Construct the initial density matrix rho
+        # construct the initial density matrix rho
         self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
-        # Population initialization
-        self.populations = np.zeros((nsites, int(time/timestep)))
+        self.additional_osc_output_dic = additional_osc_output_dic
+        # output initialization
+        self.results = {
+            "reduced_density_matrix": np.zeros((nsites, nsites, int(time/timestep)), dtype=complex),
+            "additional_osc_output": np.zeros((len(additional_osc_output_dic), int(time / timestep)), dtype=complex)
+        }
         
-        # Parameter information initialization
+        # parameter information initialization
         self.nsites = nsites
         self.localDim = localDim
         self.nosc = nosc
@@ -344,12 +347,25 @@ class Totalsys_Rho_Fixed_Step:
                         # Use the Hermitian property of the density matrix to reduce computation
                         self.rho[i][j] = self.rho[j][i].conj()
             
-            self.update_populations(step, ns)
+            self.update_results(step, ns)
             
-    def update_populations(self, step, ns):
-        
+    def update_results(self, step, ns):
+         
         for n in range(ns):
-            self.populations[n][step] = utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real
+            for m in range(n+1):
+                trace = utils.trace_MPS(self.rho[n][m], self.nosc, self.localDim)
+                if n == m:
+                    self.results["reduced_density_matrix"][n][m][step] = trace.real
+                else:
+                    self.results["reduced_density_matrix"][n][m][step] = trace
+                    self.results["reduced_density_matrix"][m][n][step] = np.conjugate(trace)
+        
+        if len(self.additional_osc_output_dic) > 0:
+            
+            for idx, (key, op) in enumerate(self.additional_osc_output_dic.items()):
+                ik = int(key)
+                expect = utils.expectation_on_Rho(op, self.rho, ik, self.nosc, self.localDim)
+                self.results["additional_osc_output"][idx][step] = expect
     
     # The evolution gates of local oscillators are identical among all matrix elements (matrix elements refer to the elements in the total system density matrix), so we only return one MPO here.
     def get_osc_gates(self, dt):
@@ -392,22 +408,22 @@ class Totalsys_Rho_Fixed_Step:
 '''
 The class Totalsys_Rho_Adaptive_Step consists of information of the total system, including:
 
-1. Parameters of the system (self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array)
+1. Parameters of the system (self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array, el_initial_state)
 2. The total system density matrix in MPS form (rho), which is a 2D array of shape (nsites, nsites), with each element being an MPS (flattened MPO) representing the density matrices of the oscillators
-3. The population dynamics during time evolution (populations), which will be updated after each time step by tracing out the diagonal MPS elements, resulting in nsites numbers,
+3. The reduced density matrix dynamics during time evolution, which will be updated after each time step,
 
-as well as methods for time evolution, population update, and construction of various evolution gates:
+as well as methods for time evolution and observable value update:
 
 1. __init__: Initializes everything
 2. Time_Evolve_Rho_Adaptive_Step: Time evolve the total system density matrix with the help of various gates
 3. specific_time_evolve: Perform a specific time evolution with a given dt index and indicator (0 or 1), where indicator 0 means one application of the whole value dt, and indicator 1 means two applications of half value dt
-4. update_populations: Update the population dynamics after each time step
-5. various gates (as illustrated below)
+4. update_results: Update the reduced density matrix as well as the additional output requirements after each time step
+5. various gates (as illustrated below).
 '''
 
 class Totalsys_Rho_Adaptive_Step:
     
-    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array, el_initial_state):
+    def __init__(self, nsites, nosc, localDim, elham, temps, freqs, damps, coups, dt_array, el_initial_state, additional_osc_output_dic={}):
         
         thermal_mps = utils.create_thermal_mps(nosc, localDim, temps, freqs)
         
@@ -421,13 +437,17 @@ class Totalsys_Rho_Adaptive_Step:
         
         self.el_initial_state = el_initial_state / np.linalg.norm(el_initial_state)
         
-        # Construct the initial density matrix rho
+        # construct the initial density matrix rho
         self.rho = np.outer(self.el_initial_state, np.conjugate(self.el_initial_state)) * thermal_mps
         
-        # Population initialization
-        self.populations = [[] for _ in range(nsites)]
+        self.additional_osc_output_dic = additional_osc_output_dic
+        # output initialization
+        self.results = {
+            "reduced_density_matrix": [[[] for _ in range(nsites)] for _ in range(nsites)],
+            "additional_osc_output": [[] for _ in range(len(additional_osc_output_dic))]
+        }
         
-        # Parameter information initialization
+        # parameter information initialization
         self.nsites = nsites
         self.localDim = localDim
         self.nosc = nosc
@@ -531,7 +551,7 @@ class Totalsys_Rho_Adaptive_Step:
                     pbar.update(dt)
                     current_time += dt
                     self.rho = rho2
-                    self.update_populations(step, ns)
+                    self.update_results(step, ns)
                     dt = dt_new
                     step += 1
                 
@@ -543,10 +563,22 @@ class Totalsys_Rho_Adaptive_Step:
                 
         return Time
             
-    def update_populations(self, step, ns):
+    def update_results(self, step, ns):
         
         for n in range(ns):
-            self.populations[n].append(utils.trace_MPS(self.rho[n][n], self.nosc, self.localDim).real)
+            for m in range(n+1):
+                trace = utils.trace_MPS(self.rho[n][m], self.nosc, self.localDim)
+                if n == m:
+                    self.results["reduced_density_matrix"][n][m].append(trace.real)
+                else:
+                    self.results["reduced_density_matrix"][n][m].append(trace)
+                    self.results["reduced_density_matrix"][m][n].append(np.conjugate(trace))
+                    
+        if len(self.additional_osc_output_dic) > 0:
+            for idx, (key, op) in enumerate(self.additional_osc_output_dic.items()):
+                ik = int(key)
+                expect = utils.expectation_on_Rho(op, self.rho, ik, self.nosc, self.localDim)
+                self.results["additional_osc_output"][idx].append(expect)
             
     '''
     This specific_time_evolve function performs time evolution using order-2 Suzuki-Trotter method, the formula expressed via superoperators is as follows:
