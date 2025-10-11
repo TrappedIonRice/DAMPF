@@ -1,0 +1,30 @@
+Ntraj = 500
+nsites = 2
+nosc = 2
+localDim = 10
+maxBondDim = 10
+timestep = 0.1
+time = 200
+
+el_initial_state =
+[1.+0.j 0.+0.j]
+
+elham =
+[[ 0.5   0.05]
+ [ 0.05 -0.5 ]]
+freqs = [1.  1.2]
+temps = [0 0]
+coups =
+[[ 0.5  0.6]
+ [-0.5 -0.6]]
+damps =
+[0.05 0.05]
+
+additional_osc_jump_op_dic =
+{}
+
+additional_osc_output_dic =
+{}
+
+Total time consumed for simulation: 1186.11 seconds
+Maximum bond dimension encountered during the simulation: 10

@@ -31,7 +31,7 @@ A Python project for pure state QT (Quantum Trajectory) simulations and density 
    The fcmaes package used for curve fitting is also recommended to be installed on Linux.
 
 ## Examples
-For beginners, run one of the main simulation scripts depending on your needs:
+For beginners, run one of the main simulation as follows:
 
 - **Pure Quantum Trajectory Simulation**
   ```powershell
@@ -49,10 +49,11 @@ For beginners, run one of the main simulation scripts depending on your needs:
 ## Hints
 - Temperatures should be given in terms of nbar.
 - When representing the total system in terms of density matrix (Example2 and Example3), the total number of modes can not be 1, in which case there exists an internal error of quimb package when doing MPS addition.
-- To achieve better performance, consider deleting all the prompting print statements in the code.
+- To achieve better performance, consider deleting the repetitive print statements in the code.
 - When using the QT Method, parallelization is highly recommended, but be aware that gates construction needs to be done separately as illustrated in the Example1.
 - The default parameters are in the configuration files, which can be modified as needed. Also, if you want to vary some of the parameters to automatically generate multiple sets of data, you can modify the input parameters of class definitions or time_evolution functions in the main simulation files.
-
+- If you are in a situation where the performance of current code is still far from what you expect, you can try to modify this code into a GPU code. I chose to use quimb package instead of other tensor network packages at the first place just because in that way the code can be much more easily modified into a GPU code (at the expense of some imperfections in the quimb package such as the one described by the second hint).
+- Please note that, when all of the freqs, damps, coups and elham are multiplied by the same number, and divide dt and total time by the same number, the result will be the same. The dt should be chosen to satisfy dt * freqs around 0.1 (for some simple running attemps, 0.5 is also OK) when the temperatures of the modes are zero, and should be smaller when the temperatures are finite. Whatsmore, the maxbondDim should be firstly chosen to be approximately 10, and then see the "max_bond_dimension_throughout_simulation" in the output file to decide whether the current maxbondDim is proper or not. 
 
 
 ## Contact
